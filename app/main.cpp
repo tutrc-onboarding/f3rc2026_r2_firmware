@@ -53,6 +53,20 @@ constexpr PIDParameters DRIVE_WHEEL_PID_PARAMS{
     .integral_upper_limit = 1.0f,
 };
 
+constexpr PIDParameters P2P_X_PID_PARAMS{
+    .kp = 1.0f,
+    .output_upper_limit = 0.5f,
+};
+constexpr PIDParameters P2P_Y_PID_PARAMS{
+    .kp = 1.0f,
+    .output_upper_limit = 0.5f,
+};
+constexpr PIDParameters P2P_YAW_PID_PARAMS{
+    .kp = 1.0f,
+    .output_upper_limit = std::numbers::pi / 2.0f,
+};
+
+
 UART_IT<&hlpuart1> lpuart1;
 uint8_t uart4_tx_buf[512];
 uint8_t uart4_rx_buf[512];
@@ -103,6 +117,7 @@ Pose robot_pose;
 
 void timer_callback(void *);
 void update_localization();
+Velocity calc_p2p_velocity(const Pose &now_pose, const Pose &target_pose);
 void drive_wheels(const Velocity &cmd_vel);
 
 extern "C" void app_main() {
@@ -156,6 +171,22 @@ void timer_callback(void *) {
           ps3.get_axis(
               PS3Axis::RIGHT_X), // 反時計回りに正となるように符号を反転
   };
+
+    if (ps3.get_key(PS3Key::CROSS)) {
+    // calc_p2p_velocityの出力はワールド座標系の速度なので、
+    // drive_wheelsが期待する機体座標系に変換する
+    // (update_localizationでの機体→ワールド変換の逆変換)
+    Pose target_pose = {0,0,0};
+    Velocity calculated_velocity =
+        calc_p2p_velocity(robot_pose, target_pose);
+    cmd_vel.x = calculated_velocity.x * std::cos(robot_pose.yaw) +
+                calculated_velocity.y * std::sin(robot_pose.yaw);
+    cmd_vel.y = calculated_velocity.y * std::cos(robot_pose.yaw) -
+                calculated_velocity.x * std::sin(robot_pose.yaw);
+    cmd_vel.yaw =
+        calculated_velocity.yaw; // 反時計回りに正となるように符号を反転
+  }
+
   drive_wheels(cmd_vel);
 
   debug_pose_x = robot_pose.x;
@@ -199,6 +230,23 @@ void update_localization() {
   float world_delta_y = delta_x * sin_yaw + delta_y * cos_yaw;
   robot_pose.x += world_delta_x;
   robot_pose.y += world_delta_y;
+}
+
+Velocity calc_p2p_velocity(const Pose &now_pose, const Pose &target_pose) {
+  static PIDController p2p_x_pid(P2P_X_PID_PARAMS, CONTROL_DT);
+  static PIDController p2p_y_pid(P2P_Y_PID_PARAMS, CONTROL_DT);
+  static PIDController p2p_yaw_pid(P2P_YAW_PID_PARAMS, CONTROL_DT);
+
+  // 目標位置までの差分を計算
+  float delta_x = target_pose.x - now_pose.x;
+  float delta_y = target_pose.y - now_pose.y;
+  float delta_yaw = target_pose.yaw - now_pose.yaw;
+
+  return {
+      p2p_x_pid.solve(delta_x),
+      p2p_y_pid.solve(delta_y),
+      p2p_yaw_pid.solve(delta_yaw),
+  };
 }
 
 void drive_wheels(const Velocity &cmd_vel) {
