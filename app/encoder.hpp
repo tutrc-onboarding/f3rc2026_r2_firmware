@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <atomic>
 
 #include "halx/peripheral.hpp"
 
@@ -72,6 +71,6 @@ private:
   uint32_t ppr_;
   float gear_ratio_;
   float dt_;
-  std::atomic<float> rps_ = 0.0f;
-  std::atomic<float> position_ = 0.0f;
+  float rps_ = 0.0f;
+  float position_ = 0.0f;
 };
