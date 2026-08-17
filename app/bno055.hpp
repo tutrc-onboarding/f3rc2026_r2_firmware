@@ -139,7 +139,7 @@ enum class BNO055Register : uint8_t {
  * BNO055<&hi2c1> imu;
  *
  * extern "C" void app_main() {
- *   imu.start(100);
+ *   imu.start();
  *
  *   if (auto euler = imu.get_euler()) {
  *     auto [yaw, roll, pitch] = *euler; // オイラー角[rad]
@@ -157,29 +157,37 @@ public:
 
   /**
    * @brief
-   * センサが応答するか確認する(CHIP_IDレジスタを読んで既定値と比較する)。
-   * @return 期待するCHIP_IDが読めた場合true
+   * センサをリセットし、起動を待ってからIMUフュージョンモードで動作を開始する。
+   *
+   * 設定が完了するまで戻らない。
    */
-  bool ping() {
-    auto res = read_register<1>(BNO055Register::CHIP_ID);
-    return res && (*res)[0] == 0xA0;
-  }
+  void start() {
+    while (true) {
+      if (!read_register<1>(BNO055Register::CHIP_ID)) {
+        continue;
+      }
+      std::array<uint8_t, 1> data{0x20};
+      write_register(BNO055Register::SYS_TRIGGER, data);
+      break;
+    }
 
-  /**
-   * @brief NDOF(9軸フュージョン)モードで動作を開始する。
-   * @return 成功した場合true
-   */
-  bool start() {
-    std::array<uint8_t, 1> data{0x00};
-    if (!write_register(BNO055Register::OPR_MODE, data)) {
-      return false;
+    halx::core::delay(700);
+
+    while (true) {
+      std::array<uint8_t, 1> data{0x00};
+      if (!write_register(BNO055Register::OPR_MODE, data)) {
+        continue;
+      }
+      data[0] = 0x04;
+      if (!write_register(BNO055Register::UNIT_SEL, data)) {
+        continue;
+      }
+      data[0] = 0x08;
+      if (!write_register(BNO055Register::OPR_MODE, data)) {
+        continue;
+      }
+      break;
     }
-    data[0] = 0x04;
-    if (!write_register(BNO055Register::UNIT_SEL, data)) {
-      return false;
-    }
-    data[0] = 0x08;
-    return write_register(BNO055Register::OPR_MODE, data);
   }
 
   /**

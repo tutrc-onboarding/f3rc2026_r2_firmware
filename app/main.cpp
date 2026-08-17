@@ -83,14 +83,26 @@ FeetechServo servo(0x1, uart5);
 
 std::atomic<float> imu_yaw = 0.0f;
 
+std::atomic<float> debug_pose_x = 0.0f;
+std::atomic<float> debug_pose_y = 0.0f;
+std::atomic<float> debug_pose_yaw = 0.0f;
+
 struct Velocity {
   float x;   // [m/s]
   float y;   // [m/s]
   float yaw; // [rad/s]
 };
 
+struct Pose {
+  float x;   // [m]
+  float y;   // [m]
+  float yaw; // [rad]
+};
+
+Pose robot_pose;
 
 void timer_callback(void *);
+void update_localization();
 void drive_wheels(const Velocity &cmd_vel);
 
 extern "C" void app_main() {
@@ -110,8 +122,6 @@ extern "C" void app_main() {
   motor2.start();
   motor3.start();
 
-  while (!imu.ping()) {
-  }
   imu.start();
 
   ST_TIM<&htim6>::register_period_elapsed_callback(timer_callback, nullptr);
@@ -122,7 +132,8 @@ extern "C" void app_main() {
       imu_yaw = std::get<0>(*euler);
     }
 
-    printf("yaw: %f\r\n", imu_yaw.load());
+    printf("Now X: %f, Now Y: %f, Now Yaw: %f\n\r", debug_pose_x.load(),
+           debug_pose_y.load(), debug_pose_yaw.load());
 
     halx::core::delay(10);
   }
@@ -135,16 +146,60 @@ void timer_callback(void *) {
   x_encoder.update();
   y_encoder.update();
   ps3.update();
+
+  update_localization();
+
   Velocity cmd_vel{
       0.5f * ps3.get_axis(PS3Axis::LEFT_X),
       0.5f * ps3.get_axis(PS3Axis::LEFT_Y),
       -(std::numbers::pi / 2.0f) *
           ps3.get_axis(
-              PS3Axis::RIdriveGHT_X), // 反時計回りに正となるように符号を反転
+              PS3Axis::RIGHT_X), // 反時計回りに正となるように符号を反転
   };
   drive_wheels(cmd_vel);
+
+  debug_pose_x = robot_pose.x;
+  debug_pose_y = robot_pose.y;
+  debug_pose_yaw = robot_pose.yaw;
 }
 
+void update_localization() {
+  // 角度差分をとる
+  float raw_yaw = imu_yaw;
+  static float pre_raw_yaw = raw_yaw;
+  float delta_yaw =
+      -(raw_yaw - pre_raw_yaw); // 反時計回りに正となるように符号を反転
+  if (delta_yaw > std::numbers::pi) {
+    delta_yaw -= 2.0f * std::numbers::pi;
+  } else if (delta_yaw < -std::numbers::pi) {
+    delta_yaw += 2.0f * std::numbers::pi;
+  }
+  pre_raw_yaw = raw_yaw;
+  robot_pose.yaw += delta_yaw; // 角度の累積
+
+  // オドメータの更新
+  static float pre_x_position = x_encoder.get_position();
+  static float pre_y_position = y_encoder.get_position();
+  const float rev_to_distance =
+      2.0f * std::numbers::pi *
+      ODOMETRY_WHEEL_RADIUS; // 1回転あたりの移動距離[m]
+  float delta_x = (x_encoder.get_position() - pre_x_position) * rev_to_distance;
+  float delta_y =
+      -(y_encoder.get_position() - pre_y_position) *
+      rev_to_distance; // y軸エンコーダが逆向きに回転するため符号を反転
+  pre_x_position = x_encoder.get_position();
+  pre_y_position = y_encoder.get_position();
+
+  // ロボット座標系からワールド座標系に変換
+  float cos_yaw = std::cos(robot_pose.yaw);
+  float sin_yaw = std::sin(robot_pose.yaw);
+
+  // ワールド座標系での変位を計算
+  float world_delta_x = delta_x * cos_yaw - delta_y * sin_yaw;
+  float world_delta_y = delta_x * sin_yaw + delta_y * cos_yaw;
+  robot_pose.x += world_delta_x;
+  robot_pose.y += world_delta_y;
+}
 
 void drive_wheels(const Velocity &cmd_vel) {
   static PIDController motor1_pid(DRIVE_WHEEL_PID_PARAMS, CONTROL_DT);
