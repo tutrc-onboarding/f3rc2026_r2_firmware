@@ -83,7 +83,15 @@ FeetechServo servo(0x1, uart5);
 
 std::atomic<float> imu_yaw = 0.0f;
 
+struct Velocity {
+  float x;   // [m/s]
+  float y;   // [m/s]
+  float yaw; // [rad/s]
+};
+
+
 void timer_callback(void *);
+void drive_wheels(const Velocity &cmd_vel);
 
 extern "C" void app_main() {
   halx::driver::enable_stdout(lpuart1);
@@ -127,20 +135,37 @@ void timer_callback(void *) {
   x_encoder.update();
   y_encoder.update();
   ps3.update();
+  Velocity cmd_vel{
+      0.5f * ps3.get_axis(PS3Axis::LEFT_X),
+      0.5f * ps3.get_axis(PS3Axis::LEFT_Y),
+      -(std::numbers::pi / 2.0f) *
+          ps3.get_axis(
+              PS3Axis::RIdriveGHT_X), // 反時計回りに正となるように符号を反転
+  };
+  drive_wheels(cmd_vel);
+}
 
+
+void drive_wheels(const Velocity &cmd_vel) {
   static PIDController motor1_pid(DRIVE_WHEEL_PID_PARAMS, CONTROL_DT);
   static PIDController motor2_pid(DRIVE_WHEEL_PID_PARAMS, CONTROL_DT);
   static PIDController motor3_pid(DRIVE_WHEEL_PID_PARAMS, CONTROL_DT);
 
-  float vx = 2.0f * ps3.get_axis(PS3Axis::LEFT_X);
-  float vy = 2.0f * ps3.get_axis(PS3Axis::LEFT_Y);
+  float vr_vel = ROBOT_RADIUS * cmd_vel.yaw;
+  float vel2rps = 1.0f / (2.0f * std::numbers::pi * DRIVE_WHEEL_RADIUS);
 
   float motor1_target_rps =
-      -vx * std::sin(DRIVE_WHEEL_THETA_1) + vy * std::cos(DRIVE_WHEEL_THETA_1);
+      (-cmd_vel.x * std::sin(DRIVE_WHEEL_THETA_1) +
+       cmd_vel.y * std::cos(DRIVE_WHEEL_THETA_1) + vr_vel) *
+      vel2rps;
   float motor2_target_rps =
-      -vx * std::sin(DRIVE_WHEEL_THETA_2) + vy * std::cos(DRIVE_WHEEL_THETA_2);
+      (-cmd_vel.x * std::sin(DRIVE_WHEEL_THETA_2) +
+       cmd_vel.y * std::cos(DRIVE_WHEEL_THETA_2) + vr_vel) *
+      vel2rps;
   float motor3_target_rps =
-      -vx * std::sin(DRIVE_WHEEL_THETA_3) + vy * std::cos(DRIVE_WHEEL_THETA_3);
+      (-cmd_vel.x * std::sin(DRIVE_WHEEL_THETA_3) +
+       cmd_vel.y * std::cos(DRIVE_WHEEL_THETA_3) + vr_vel) *
+      vel2rps;
 
   float motor1_output =
       motor1_pid.solve(motor1_target_rps - motor1_encoder.get_rps());
