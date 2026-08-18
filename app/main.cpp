@@ -148,6 +148,8 @@ void set_pose_target_velocity(const Pose &now_pose, const Pose &target_pose,
 void drive_wheels(const Velocity &cmd_vel);
 
 extern "C" void app_main() {
+
+  auto_control_mode = AutoControlMode::IDLE;
   halx::driver::enable_stdout(lpuart1);
 
   uart4.start();
@@ -165,8 +167,6 @@ extern "C" void app_main() {
   motor3.start();
 
   imu.start();
-
-  start_pose_sequence();
 
   ST_TIM<&htim6>::register_period_elapsed_callback(timer_callback, nullptr);
   ST_TIM<&htim6>::start_base_it();
@@ -200,10 +200,13 @@ void timer_callback(void *) {
           ps3.get_axis(
               PS3Axis::RIGHT_X), // 反時計回りに正となるように符号を反転
   };
-
+  if (ps3.get_key_down(PS3Key::START)){
+    start_pose_sequence();
+  }
   if (ps3.get_key_down(PS3Key::CROSS)) {
     start_return_home();
   }
+
 
   update_auto_control(robot_pose, cmd_vel);
 
@@ -288,6 +291,7 @@ bool update_auto_control(const Pose &now_pose, Velocity &cmd_vel) {
     return true;
   }
 
+
   const Pose &target_pose = SEQUENCE_TARGET_POSES[sequence_target_index]; //目標ポイントを更新
   const float delta_x = target_pose.x - now_pose.x;
   const float delta_y = target_pose.y - now_pose.y;
@@ -297,15 +301,14 @@ bool update_auto_control(const Pose &now_pose, Velocity &cmd_vel) {
 
   if (position_error_squared <= position_tolerance_squared) {
     ++sequence_target_index;
-    if (sequence_target_index >= SEQUENCE_TARGET_POSES.size()) { //シーケンス達成回数が設定した要素数を超えたら開始地点に戻る
+    if (sequence_target_index >= SEQUENCE_TARGET_POSES.size()) { //シーケンス達成回数が設定した要素数を超えたら停止
       auto_control_mode = AutoControlMode::IDLE;
       cmd_vel = {0.0f, 0.0f, 0.0f};
       return true;
     }
   }
 
-  set_pose_target_velocity(now_pose,
-                           SEQUENCE_TARGET_POSES[sequence_target_index], cmd_vel);
+  set_pose_target_velocity(now_pose, SEQUENCE_TARGET_POSES[sequence_target_index], cmd_vel);
   return true;
 }
 
