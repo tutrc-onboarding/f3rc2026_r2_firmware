@@ -115,7 +115,7 @@ struct Pose {
 };
 
 constexpr float SEQUENCE_POSITION_TOLERANCE = 0.05f; // [m]
-// 起動地点と起動時の向きを (0 m, 0 m, 0 rad) とする絶対目標。
+// 起動地点と起動時の向きを (0 m, 0 m, 0 rad)
 constexpr Pose HOME_POSE{0.0f, 0.0f, 0.0f};
 
 // 目標ポイント一覧
