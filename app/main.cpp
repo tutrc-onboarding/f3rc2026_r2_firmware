@@ -1,3 +1,4 @@
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <cstdio>
@@ -113,11 +114,37 @@ struct Pose {
   float yaw; // [rad]
 };
 
+constexpr float SEQUENCE_POSITION_TOLERANCE = 0.05f; // [m]
+// 起動地点と起動時の向きを (0 m, 0 m, 0 rad) とする絶対目標。
+constexpr Pose HOME_POSE{0.0f, 0.0f, 0.0f};
+
+// 目標ポイント一覧
+constexpr std::array<Pose, 3> SEQUENCE_TARGET_POSES{{
+  // {x, y, w}
+    {0.0f, 1.0f, 0.0f},
+    {1.0f, 1.0f, 0.0f},
+    {0.0f, 0.0f, 0.0f},
+}};
+
+// コントロールモード一覧
+enum class AutoControlMode {
+  IDLE,
+  POSE_SEQUENCE,
+  RETURN_HOME,
+};
+
 Pose robot_pose;
+AutoControlMode auto_control_mode = AutoControlMode::IDLE;
+int sequence_target_index = 0;
 
 void timer_callback(void *);
 void update_localization();
 Velocity calc_p2p_velocity(const Pose &now_pose, const Pose &target_pose);
+void start_pose_sequence();
+void start_return_home();
+bool update_auto_control(const Pose &now_pose, Velocity &cmd_vel);
+void set_pose_target_velocity(const Pose &now_pose, const Pose &target_pose,
+                              Velocity &cmd_vel);
 void drive_wheels(const Velocity &cmd_vel);
 
 extern "C" void app_main() {
@@ -138,6 +165,8 @@ extern "C" void app_main() {
   motor3.start();
 
   imu.start();
+
+  start_pose_sequence();
 
   ST_TIM<&htim6>::register_period_elapsed_callback(timer_callback, nullptr);
   ST_TIM<&htim6>::start_base_it();
@@ -172,20 +201,11 @@ void timer_callback(void *) {
               PS3Axis::RIGHT_X), // 反時計回りに正となるように符号を反転
   };
 
-    if (ps3.get_key(PS3Key::CROSS)) {
-    // calc_p2p_velocityの出力はワールド座標系の速度なので、
-    // drive_wheelsが期待する機体座標系に変換する
-    // (update_localizationでの機体→ワールド変換の逆変換)
-    Pose target_pose = {0,0,0};
-    Velocity calculated_velocity =
-        calc_p2p_velocity(robot_pose, target_pose);
-    cmd_vel.x = calculated_velocity.x * std::cos(robot_pose.yaw) +
-                calculated_velocity.y * std::sin(robot_pose.yaw);
-    cmd_vel.y = calculated_velocity.y * std::cos(robot_pose.yaw) -
-                calculated_velocity.x * std::sin(robot_pose.yaw);
-    cmd_vel.yaw =
-        calculated_velocity.yaw; // 反時計回りに正となるように符号を反転
+  if (ps3.get_key_down(PS3Key::CROSS)) {
+    start_return_home();
   }
+
+  update_auto_control(robot_pose, cmd_vel);
 
   drive_wheels(cmd_vel);
 
@@ -247,6 +267,57 @@ Velocity calc_p2p_velocity(const Pose &now_pose, const Pose &target_pose) {
       p2p_y_pid.solve(delta_y),
       p2p_yaw_pid.solve(delta_yaw),
   };
+}
+
+void start_pose_sequence() {
+  sequence_target_index = 0;
+  auto_control_mode = AutoControlMode::POSE_SEQUENCE;
+}
+
+void start_return_home() {
+  auto_control_mode = AutoControlMode::RETURN_HOME;
+}
+
+bool update_auto_control(const Pose &now_pose, Velocity &cmd_vel) {
+  if (auto_control_mode == AutoControlMode::IDLE) {
+    return false;
+  }
+
+  if (auto_control_mode == AutoControlMode::RETURN_HOME) {
+    set_pose_target_velocity(now_pose, HOME_POSE, cmd_vel);
+    return true;
+  }
+
+  const Pose &target_pose = SEQUENCE_TARGET_POSES[sequence_target_index]; //目標ポイントを更新
+  const float delta_x = target_pose.x - now_pose.x;
+  const float delta_y = target_pose.y - now_pose.y;
+  const float position_error_squared = delta_x * delta_x + delta_y * delta_y; //目標ポイントとの差分を計算
+  constexpr float position_tolerance_squared =
+      SEQUENCE_POSITION_TOLERANCE * SEQUENCE_POSITION_TOLERANCE;
+
+  if (position_error_squared <= position_tolerance_squared) {
+    ++sequence_target_index;
+    if (sequence_target_index >= SEQUENCE_TARGET_POSES.size()) { //シーケンス達成回数が設定した要素数を超えたら開始地点に戻る
+      auto_control_mode = AutoControlMode::IDLE;
+      cmd_vel = {0.0f, 0.0f, 0.0f};
+      return true;
+    }
+  }
+
+  set_pose_target_velocity(now_pose,
+                           SEQUENCE_TARGET_POSES[sequence_target_index], cmd_vel);
+  return true;
+}
+
+void set_pose_target_velocity(const Pose &now_pose, const Pose &target_pose,
+                              Velocity &cmd_vel) {
+  const Velocity world_velocity = calc_p2p_velocity(now_pose, target_pose);
+
+  const float cos_yaw = std::cos(now_pose.yaw);
+  const float sin_yaw = std::sin(now_pose.yaw);
+  cmd_vel.x = world_velocity.x * cos_yaw + world_velocity.y * sin_yaw;
+  cmd_vel.y = world_velocity.y * cos_yaw - world_velocity.x * sin_yaw;
+  cmd_vel.yaw = world_velocity.yaw;
 }
 
 void drive_wheels(const Velocity &cmd_vel) {
