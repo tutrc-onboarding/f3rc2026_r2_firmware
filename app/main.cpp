@@ -112,8 +112,6 @@ struct Pose {
 };
 
 constexpr float SEQUENCE_POSITION_TOLERANCE = 0.05f; // [m]
-// 起動地点と起動時の向きを (0 m, 0 m, 0 rad)
-constexpr Pose HOME_POSE{0.0f, 0.0f, 0.0f};
 
 // 目標ポイント一覧
 constexpr std::array<Pose, 3> SEQUENCE_TARGET_POSES{{
@@ -125,27 +123,22 @@ constexpr std::array<Pose, 3> SEQUENCE_TARGET_POSES{{
 
 // コントロールモード一覧
 enum class AutoControlMode {
-  IDLE,
+  MANUAL,
   POSE_SEQUENCE,
-  RETURN_HOME,
 };
 
 Pose robot_pose;
-AutoControlMode auto_control_mode = AutoControlMode::IDLE;
-int sequence_target_index = 0;
+AutoControlMode auto_control_mode = AutoControlMode::MANUAL;
+size_t sequence_target_index = 0;
 
 void timer_callback(void *);
 void update_localization();
-Velocity calc_p2p_velocity(const Pose &now_pose, const Pose &target_pose);
-void start_pose_sequence();
-void start_return_home();
-void update_auto_control(const Pose &now_pose, Velocity &cmd_vel);
-void set_pose_target_velocity(const Pose &now_pose, const Pose &target_pose, Velocity &cmd_vel);
+Velocity calculate_velocity(const Pose &now_pose, const Pose &target_pose);
 void drive_wheels(const Velocity &cmd_vel);
 
 extern "C" void app_main() {
 
-  auto_control_mode = AutoControlMode::IDLE;
+  auto_control_mode = AutoControlMode::MANUAL;
   halx::driver::enable_stdout(lpuart1);
 
   uart4.start();
@@ -188,21 +181,40 @@ void timer_callback(void *) {
 
   update_localization();
 
-  Velocity velocity{
-      0.5f * ps3.get_axis(PS3Axis::LEFT_X),
-      0.5f * ps3.get_axis(PS3Axis::LEFT_Y),
-      -(std::numbers::pi / 2.0f) * ps3.get_axis(PS3Axis::RIGHT_X), // 反時計回りに正となるように符号を反転
-  };
-  if (ps3.get_key_down(PS3Key::START)) {
-    start_pose_sequence();
-  }
-  if (ps3.get_key_down(PS3Key::CROSS)) {
-    start_return_home();
+  switch (auto_control_mode) {
+  case AutoControlMode::MANUAL: {
+    if (ps3.get_key_down(PS3Key::START)) {
+      sequence_target_index = 0;
+      auto_control_mode = AutoControlMode::POSE_SEQUENCE;
+    }
+
+    Velocity velocity;
+    velocity.x = 0.5f * ps3.get_axis(PS3Axis::LEFT_X);
+    velocity.y = 0.5f * ps3.get_axis(PS3Axis::LEFT_Y);
+    velocity.yaw = -(std::numbers::pi / 2.0f) * ps3.get_axis(PS3Axis::RIGHT_X); // 反時計回りに正となるように符号を反転
+    drive_wheels(velocity);
+    break;
   }
 
-  update_auto_control(robot_pose, velocity);
+  case AutoControlMode::POSE_SEQUENCE: {
+    const Pose &target_pose = SEQUENCE_TARGET_POSES[sequence_target_index]; // 目標ポイントを更新
+    const float delta_x = target_pose.x - robot_pose.x;
+    const float delta_y = target_pose.y - robot_pose.y;
+    const float position_error_squared = delta_x * delta_x + delta_y * delta_y; // 目標ポイントとの差分を計算
+    constexpr float POSITION_TOLERANCE_SQUARED = SEQUENCE_POSITION_TOLERANCE * SEQUENCE_POSITION_TOLERANCE;
 
-  drive_wheels(velocity);
+    if (position_error_squared <= POSITION_TOLERANCE_SQUARED) {
+      ++sequence_target_index;
+      if (sequence_target_index >= SEQUENCE_TARGET_POSES.size()) { // シーケンス達成回数が設定した要素数を超えたら停止
+        auto_control_mode = AutoControlMode::MANUAL;
+        break;
+      }
+    }
+    Velocity velocity = calculate_velocity(robot_pose, SEQUENCE_TARGET_POSES[sequence_target_index]);
+    drive_wheels(velocity);
+    break;
+  }
+  }
 
   debug_pose_x = robot_pose.x;
   debug_pose_y = robot_pose.y;
@@ -243,68 +255,22 @@ void update_localization() {
   robot_pose.y += world_delta_y;
 }
 
-Velocity calc_p2p_velocity(const Pose &now_pose, const Pose &target_pose) {
+Velocity calculate_velocity(const Pose &now_pose, const Pose &target_pose) {
   static PIDController p2p_x_pid(P2P_X_PID_PARAMS, CONTROL_DT);
   static PIDController p2p_y_pid(P2P_Y_PID_PARAMS, CONTROL_DT);
   static PIDController p2p_yaw_pid(P2P_YAW_PID_PARAMS, CONTROL_DT);
 
-  // 目標位置までの差分を計算
-  float delta_x = target_pose.x - now_pose.x;
-  float delta_y = target_pose.y - now_pose.y;
-  float delta_yaw = target_pose.yaw - now_pose.yaw;
+  Velocity world_velocity;
+  world_velocity.x = p2p_x_pid.solve(target_pose.x - now_pose.x);
+  world_velocity.y = p2p_y_pid.solve(target_pose.y - now_pose.y);
+  world_velocity.yaw = p2p_yaw_pid.solve(target_pose.yaw - now_pose.yaw);
 
-  return {
-      p2p_x_pid.solve(delta_x),
-      p2p_y_pid.solve(delta_y),
-      p2p_yaw_pid.solve(delta_yaw),
-  };
-}
+  Velocity robot_velocity;
+  robot_velocity.x = world_velocity.x * std::cos(now_pose.yaw) + world_velocity.y * std::sin(now_pose.yaw);
+  robot_velocity.y = world_velocity.y * std::cos(now_pose.yaw) - world_velocity.x * std::sin(now_pose.yaw);
+  robot_velocity.yaw = world_velocity.yaw;
 
-void start_pose_sequence() {
-  sequence_target_index = 0;
-  auto_control_mode = AutoControlMode::POSE_SEQUENCE;
-}
-
-void start_return_home() { auto_control_mode = AutoControlMode::RETURN_HOME; }
-
-void update_auto_control(const Pose &now_pose, Velocity &velocity) {
-  switch (auto_control_mode) {
-  case AutoControlMode::IDLE: {
-    break;
-  }
-
-  case AutoControlMode::POSE_SEQUENCE: {
-    const Pose &target_pose = SEQUENCE_TARGET_POSES[sequence_target_index]; // 目標ポイントを更新
-    const float delta_x = target_pose.x - now_pose.x;
-    const float delta_y = target_pose.y - now_pose.y;
-    const float position_error_squared = delta_x * delta_x + delta_y * delta_y; // 目標ポイントとの差分を計算
-    constexpr float POSITION_TOLERANCE_SQUARED = SEQUENCE_POSITION_TOLERANCE * SEQUENCE_POSITION_TOLERANCE;
-
-    if (position_error_squared <= POSITION_TOLERANCE_SQUARED) {
-      ++sequence_target_index;
-      if (sequence_target_index >= SEQUENCE_TARGET_POSES.size()) { // シーケンス達成回数が設定した要素数を超えたら停止
-        auto_control_mode = AutoControlMode::IDLE;
-        velocity = {0.0f, 0.0f, 0.0f};
-        break;
-      }
-    }
-    set_pose_target_velocity(now_pose, SEQUENCE_TARGET_POSES[sequence_target_index], velocity);
-    break;
-  }
-
-  case AutoControlMode::RETURN_HOME: {
-    set_pose_target_velocity(now_pose, HOME_POSE, velocity);
-    break;
-  }
-  }
-}
-
-void set_pose_target_velocity(const Pose &now_pose, const Pose &target_pose, Velocity &cmd_vel) {
-  const Velocity world_velocity = calc_p2p_velocity(now_pose, target_pose);
-
-  cmd_vel.x = world_velocity.x * std::cos(now_pose.yaw) + world_velocity.y * std::sin(now_pose.yaw);
-  cmd_vel.y = world_velocity.y * std::cos(now_pose.yaw) - world_velocity.x * std::sin(now_pose.yaw);
-  cmd_vel.yaw = world_velocity.yaw;
+  return robot_velocity;
 }
 
 void drive_wheels(const Velocity &velocity) {
