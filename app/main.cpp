@@ -12,7 +12,8 @@
 
 #include "bno055.hpp"
 #include "encoder.hpp"
-#include "feetech_servo.hpp"
+#include "feetech_position_control.hpp"
+#include "feetech_velocity_control.hpp"
 #include "main.h"
 #include "motor.hpp"
 #include "pid_controller.hpp"
@@ -91,7 +92,7 @@ Motor<&htim20> motor3(TIM_CHANNEL_1, motor3_pin);
 
 PS3 ps3(uart4);
 BNO055<&hi2c3> imu;
-FeetechServo servo(0x1, uart5);
+FeetechVelocityControl servo(uart5, 3);
 
 std::atomic<float> imu_yaw = 0.0f;
 
@@ -156,6 +157,8 @@ extern "C" void app_main() {
 
   imu.start();
 
+  servo.start();
+
   ST_TIM<&htim6>::register_period_elapsed_callback(timer_callback, nullptr);
   ST_TIM<&htim6>::start_base_it();
 
@@ -164,7 +167,10 @@ extern "C" void app_main() {
       imu_yaw = std::get<0>(*euler);
     }
 
-    printf("x: %f, y: %f, yaw: %f\n\r", debug_pose_x.load(), debug_pose_y.load(), debug_pose_yaw.load());
+    servo.update();
+
+    printf("x: %f, y: %f, yaw: %f, %f\n\r", debug_pose_x.load(), debug_pose_y.load(), debug_pose_yaw.load(),
+           servo.get_position());
 
     halx::core::delay(10);
   }
@@ -179,6 +185,8 @@ void timer_callback(void *) {
   ps3.update();
 
   update_localization();
+
+  servo.set_velocity(1.0);
 
   switch (auto_control_mode) {
   case AutoControlMode::EMERGENCY_STOP: {

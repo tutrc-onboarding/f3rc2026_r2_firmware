@@ -17,7 +17,7 @@
  *
  * extern UART_HandleTypeDef huart1;
  * halx::driver::UART_IT<&huart1> uart1;
- * FeetechServo servo(1, uart1);
+ * FeetechServo servo(uart1, 1);
  *
  * extern "C" void app_main() {
  *   uart1.start();
@@ -34,11 +34,10 @@ class FeetechServo {
 public:
   /**
    * @brief コンストラクタ。
-   * @param id サーボのID
    * @param uart サーボと接続されたUART(半二重、echo受信を前提とする)
+   * @param id サーボのID
    */
-  FeetechServo(uint8_t id, halx::driver::UARTBase &uart)
-      : id_{id}, uart_{uart} {}
+  FeetechServo(halx::driver::UARTBase &uart, uint8_t id) : id_{id}, uart_{uart} {}
 
   /**
    * @brief 直近の応答パケットに含まれていたエラーコードを取得する。
@@ -111,18 +110,14 @@ public:
    * @param value モード値
    * @return 成功した場合true
    */
-  bool control_mode(uint8_t value) {
-    return write_data(0x21, &value, sizeof(value));
-  }
+  bool control_mode(uint8_t value) { return write_data(0x21, &value, sizeof(value)); }
 
   /**
    * @brief トルクのON/OFFを設定する。
    * @param value 0でOFF、非0でON
    * @return 成功した場合true
    */
-  bool enable_torque(uint8_t value) {
-    return write_data(0x28, &value, sizeof(value));
-  }
+  bool enable_torque(uint8_t value) { return write_data(0x28, &value, sizeof(value)); }
 
   /**
    * @brief 目標位置を設定する。
@@ -205,8 +200,7 @@ private:
     if (!uart_.read(header, sizeof(header), TIMEOUT_MS)) {
       return false;
     }
-    if (header[0] != 0xFF || header[1] != 0xFF || header[2] != id_ ||
-        header[3] != size + 2) {
+    if (header[0] != 0xFF || header[1] != 0xFF || header[2] != id_ || header[3] != size + 2) {
       return false;
     }
 

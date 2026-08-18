@@ -171,7 +171,7 @@ public:
       break;
     }
 
-    halx::core::delay(700);
+    halx::core::delay(1000);
 
     while (true) {
       std::array<uint8_t, 1> data{0x00};
@@ -229,12 +229,9 @@ public:
    * @param data 書き込むデータ
    * @return 成功した場合true
    */
-  template <size_t N>
-  bool write_register(BNO055Register address,
-                      const std::array<uint8_t, N> &data) {
-    return halx::peripheral::ST_I2C<Handle>::mem_write(
-        address_, std::to_underlying(address), 1, data.data(), data.size(),
-        TIMEOUT);
+  template <size_t N> bool write_register(BNO055Register address, const std::array<uint8_t, N> &data) {
+    return halx::peripheral::ST_I2C<Handle>::mem_write(address_, std::to_underlying(address), 1, data.data(),
+                                                       data.size(), TIMEOUT);
   }
 
   /**
@@ -243,12 +240,10 @@ public:
    * @param address 読み取り元レジスタ
    * @return 成功した場合読み取ったデータ、失敗した場合`std::nullopt`
    */
-  template <size_t N>
-  std::optional<std::array<uint8_t, N>> read_register(BNO055Register address) {
+  template <size_t N> std::optional<std::array<uint8_t, N>> read_register(BNO055Register address) {
     std::array<uint8_t, N> data;
-    if (!halx::peripheral::ST_I2C<Handle>::mem_read(
-            address_, std::to_underlying(address), 1, data.data(), data.size(),
-            TIMEOUT)) {
+    if (!halx::peripheral::ST_I2C<Handle>::mem_read(address_, std::to_underlying(address), 1, data.data(), data.size(),
+                                                    TIMEOUT)) {
       return std::nullopt;
     }
     return data;
