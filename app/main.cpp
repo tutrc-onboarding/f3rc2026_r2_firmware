@@ -13,7 +13,6 @@
 #include "bno055.hpp"
 #include "encoder.hpp"
 #include "feetech_position_control.hpp"
-#include "feetech_velocity_control.hpp"
 #include "main.h"
 #include "motor.hpp"
 #include "pid_controller.hpp"
@@ -92,7 +91,7 @@ Motor<&htim20> motor3(TIM_CHANNEL_1, motor3_pin);
 
 PS3 ps3(uart4);
 BNO055<&hi2c3> imu;
-FeetechVelocityControl servo(uart5, 3);
+FeetechPositionControl servo(uart5, 3, 0.0f, 100, 2000);
 
 std::atomic<float> imu_yaw = 0.0f;
 
@@ -186,8 +185,6 @@ void timer_callback(void *) {
 
   update_localization();
 
-  servo.set_velocity(1.0);
-
   switch (auto_control_mode) {
   case AutoControlMode::EMERGENCY_STOP: {
     if (ps3.get_key(PS3Key::L1) && ps3.get_key(PS3Key::R1)) {
@@ -200,6 +197,13 @@ void timer_callback(void *) {
     if (ps3.get_key_down(PS3Key::START)) {
       sequence_target_index = 0;
       auto_control_mode = AutoControlMode::FOLLOW_SEQUENCE;
+    }
+
+    if (ps3.get_key_down(PS3Key::LEFT)) {
+      servo.set_position(0.0f);
+    }
+    if (ps3.get_key_down(PS3Key::RIGHT)) {
+      servo.set_position(2.0f);
     }
 
     Velocity velocity;

@@ -2,16 +2,28 @@
 
 #include <atomic>
 #include <cstdint>
+#include <cstdio>
+#include <cstring>
 
 #include "feetech_servo.hpp"
 
 class FeetechPositionControl {
 public:
-  FeetechPositionControl(halx::driver::UARTBase &uart, uint8_t id) : servo_{uart, id} {}
+  FeetechPositionControl(halx::driver::UARTBase &uart, uint8_t id, float initial_position, uint16_t min_angle_limit,
+                         uint16_t max_angle_limit)
+      : servo_{uart, id}, position_target_{initial_position}, min_angle_limit_{min_angle_limit},
+        max_angle_limit_{max_angle_limit} {}
 
   void start() {
     while (!servo_.ping()) {
     }
+
+    uint8_t buf[2];
+    std::memcpy(buf, &min_angle_limit_, sizeof(buf));
+    servo_.write_data(0x09, buf, sizeof(buf));
+    std::memcpy(buf, &max_angle_limit_, sizeof(buf));
+    servo_.write_data(0x0B, buf, sizeof(buf));
+
     servo_.control_mode(0);
     servo_.enable_torque(1);
   }
@@ -28,7 +40,9 @@ public:
 private:
   FeetechServo servo_;
   std::atomic<float> position_ = 0.0f;
-  std::atomic<float> position_target_ = 0.0f;
+  std::atomic<float> position_target_;
+  uint16_t min_angle_limit_;
+  uint16_t max_angle_limit_;
 
   void read_position() {
     int16_t raw_position;
