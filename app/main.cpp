@@ -123,12 +123,13 @@ constexpr std::array<Pose, 3> SEQUENCE_TARGET_POSES{{
 
 // コントロールモード一覧
 enum class AutoControlMode {
+  EMERGENCY_STOP,
   MANUAL,
-  POSE_SEQUENCE,
+  FOLLOW_SEQUENCE,
 };
 
 Pose robot_pose;
-AutoControlMode auto_control_mode = AutoControlMode::MANUAL;
+AutoControlMode auto_control_mode = AutoControlMode::EMERGENCY_STOP;
 size_t sequence_target_index = 0;
 
 void timer_callback(void *);
@@ -137,8 +138,6 @@ Velocity calculate_velocity(const Pose &now_pose, const Pose &target_pose);
 void drive_wheels(const Velocity &cmd_vel);
 
 extern "C" void app_main() {
-
-  auto_control_mode = AutoControlMode::MANUAL;
   halx::driver::enable_stdout(lpuart1);
 
   uart4.start();
@@ -182,10 +181,17 @@ void timer_callback(void *) {
   update_localization();
 
   switch (auto_control_mode) {
+  case AutoControlMode::EMERGENCY_STOP: {
+    if (ps3.get_key(PS3Key::L1) && ps3.get_key(PS3Key::R1)) {
+      auto_control_mode = AutoControlMode::MANUAL;
+    }
+    break;
+  }
+
   case AutoControlMode::MANUAL: {
     if (ps3.get_key_down(PS3Key::START)) {
       sequence_target_index = 0;
-      auto_control_mode = AutoControlMode::POSE_SEQUENCE;
+      auto_control_mode = AutoControlMode::FOLLOW_SEQUENCE;
     }
 
     Velocity velocity;
@@ -196,7 +202,7 @@ void timer_callback(void *) {
     break;
   }
 
-  case AutoControlMode::POSE_SEQUENCE: {
+  case AutoControlMode::FOLLOW_SEQUENCE: {
     const Pose &target_pose = SEQUENCE_TARGET_POSES[sequence_target_index]; // 目標ポイントを更新
     const float delta_x = target_pose.x - robot_pose.x;
     const float delta_y = target_pose.y - robot_pose.y;
