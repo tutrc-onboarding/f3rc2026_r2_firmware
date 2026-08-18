@@ -139,7 +139,7 @@ void update_localization();
 Velocity calc_p2p_velocity(const Pose &now_pose, const Pose &target_pose);
 void start_pose_sequence();
 void start_return_home();
-bool update_auto_control(const Pose &now_pose, Velocity &cmd_vel);
+void update_auto_control(const Pose &now_pose, Velocity &cmd_vel);
 void set_pose_target_velocity(const Pose &now_pose, const Pose &target_pose, Velocity &cmd_vel);
 void drive_wheels(const Velocity &cmd_vel);
 
@@ -188,7 +188,7 @@ void timer_callback(void *) {
 
   update_localization();
 
-  Velocity cmd_vel{
+  Velocity velocity{
       0.5f * ps3.get_axis(PS3Axis::LEFT_X),
       0.5f * ps3.get_axis(PS3Axis::LEFT_Y),
       -(std::numbers::pi / 2.0f) * ps3.get_axis(PS3Axis::RIGHT_X), // 反時計回りに正となるように符号を反転
@@ -200,9 +200,9 @@ void timer_callback(void *) {
     start_return_home();
   }
 
-  update_auto_control(robot_pose, cmd_vel);
+  update_auto_control(robot_pose, velocity);
 
-  drive_wheels(cmd_vel);
+  drive_wheels(velocity);
 
   debug_pose_x = robot_pose.x;
   debug_pose_y = robot_pose.y;
@@ -267,42 +267,43 @@ void start_pose_sequence() {
 
 void start_return_home() { auto_control_mode = AutoControlMode::RETURN_HOME; }
 
-bool update_auto_control(const Pose &now_pose, Velocity &cmd_vel) {
-  if (auto_control_mode == AutoControlMode::IDLE) {
-    return false;
+void update_auto_control(const Pose &now_pose, Velocity &velocity) {
+  switch (auto_control_mode) {
+  case AutoControlMode::IDLE: {
+    break;
   }
 
-  if (auto_control_mode == AutoControlMode::RETURN_HOME) {
-    set_pose_target_velocity(now_pose, HOME_POSE, cmd_vel);
-    return true;
-  }
+  case AutoControlMode::POSE_SEQUENCE: {
+    const Pose &target_pose = SEQUENCE_TARGET_POSES[sequence_target_index]; // 目標ポイントを更新
+    const float delta_x = target_pose.x - now_pose.x;
+    const float delta_y = target_pose.y - now_pose.y;
+    const float position_error_squared = delta_x * delta_x + delta_y * delta_y; // 目標ポイントとの差分を計算
+    constexpr float POSITION_TOLERANCE_SQUARED = SEQUENCE_POSITION_TOLERANCE * SEQUENCE_POSITION_TOLERANCE;
 
-  const Pose &target_pose = SEQUENCE_TARGET_POSES[sequence_target_index]; // 目標ポイントを更新
-  const float delta_x = target_pose.x - now_pose.x;
-  const float delta_y = target_pose.y - now_pose.y;
-  const float position_error_squared = delta_x * delta_x + delta_y * delta_y; // 目標ポイントとの差分を計算
-  constexpr float position_tolerance_squared = SEQUENCE_POSITION_TOLERANCE * SEQUENCE_POSITION_TOLERANCE;
-
-  if (position_error_squared <= position_tolerance_squared) {
-    ++sequence_target_index;
-    if (sequence_target_index >= SEQUENCE_TARGET_POSES.size()) { // シーケンス達成回数が設定した要素数を超えたら停止
-      auto_control_mode = AutoControlMode::IDLE;
-      cmd_vel = {0.0f, 0.0f, 0.0f};
-      return true;
+    if (position_error_squared <= POSITION_TOLERANCE_SQUARED) {
+      ++sequence_target_index;
+      if (sequence_target_index >= SEQUENCE_TARGET_POSES.size()) { // シーケンス達成回数が設定した要素数を超えたら停止
+        auto_control_mode = AutoControlMode::IDLE;
+        velocity = {0.0f, 0.0f, 0.0f};
+        break;
+      }
     }
+    set_pose_target_velocity(now_pose, SEQUENCE_TARGET_POSES[sequence_target_index], velocity);
+    break;
   }
 
-  set_pose_target_velocity(now_pose, SEQUENCE_TARGET_POSES[sequence_target_index], cmd_vel);
-  return true;
+  case AutoControlMode::RETURN_HOME: {
+    set_pose_target_velocity(now_pose, HOME_POSE, velocity);
+    break;
+  }
+  }
 }
 
 void set_pose_target_velocity(const Pose &now_pose, const Pose &target_pose, Velocity &cmd_vel) {
   const Velocity world_velocity = calc_p2p_velocity(now_pose, target_pose);
 
-  const float cos_yaw = std::cos(now_pose.yaw);
-  const float sin_yaw = std::sin(now_pose.yaw);
-  cmd_vel.x = world_velocity.x * cos_yaw + world_velocity.y * sin_yaw;
-  cmd_vel.y = world_velocity.y * cos_yaw - world_velocity.x * sin_yaw;
+  cmd_vel.x = world_velocity.x * std::cos(now_pose.yaw) + world_velocity.y * std::sin(now_pose.yaw);
+  cmd_vel.y = world_velocity.y * std::cos(now_pose.yaw) - world_velocity.x * std::sin(now_pose.yaw);
   cmd_vel.yaw = world_velocity.yaw;
 }
 
