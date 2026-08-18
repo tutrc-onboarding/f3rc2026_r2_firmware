@@ -67,16 +67,13 @@ constexpr PIDParameters P2P_YAW_PID_PARAMS{
     .output_upper_limit = std::numbers::pi / 2.0f,
 };
 
-
 UART_IT<&hlpuart1> lpuart1;
 uint8_t uart4_tx_buf[512];
 uint8_t uart4_rx_buf[512];
-UART_DMA<&huart4> uart4(uart4_tx_buf, sizeof(uart4_tx_buf), uart4_rx_buf,
-                        sizeof(uart4_rx_buf));
+UART_DMA<&huart4> uart4(uart4_tx_buf, sizeof(uart4_tx_buf), uart4_rx_buf, sizeof(uart4_rx_buf));
 uint8_t uart5_tx_buf[512];
 uint8_t uart5_rx_buf[512];
-UART_DMA<&huart5> uart5(uart5_tx_buf, sizeof(uart5_tx_buf), uart5_rx_buf,
-                        sizeof(uart5_rx_buf));
+UART_DMA<&huart5> uart5(uart5_tx_buf, sizeof(uart5_tx_buf), uart5_rx_buf, sizeof(uart5_rx_buf));
 
 GPIO motor1_pin(Motor8_GPIO_Port, Motor8_Pin);
 GPIO motor2_pin(Motor5_GPIO_Port, Motor5_Pin);
@@ -120,7 +117,7 @@ constexpr Pose HOME_POSE{0.0f, 0.0f, 0.0f};
 
 // 目標ポイント一覧
 constexpr std::array<Pose, 3> SEQUENCE_TARGET_POSES{{
-  // {x, y, w}
+    // {x, y, w}
     {0.0f, 1.0f, 0.0f},
     {1.0f, 1.0f, 0.0f},
     {0.0f, 0.0f, 0.0f},
@@ -143,8 +140,7 @@ Velocity calc_p2p_velocity(const Pose &now_pose, const Pose &target_pose);
 void start_pose_sequence();
 void start_return_home();
 bool update_auto_control(const Pose &now_pose, Velocity &cmd_vel);
-void set_pose_target_velocity(const Pose &now_pose, const Pose &target_pose,
-                              Velocity &cmd_vel);
+void set_pose_target_velocity(const Pose &now_pose, const Pose &target_pose, Velocity &cmd_vel);
 void drive_wheels(const Velocity &cmd_vel);
 
 extern "C" void app_main() {
@@ -176,8 +172,7 @@ extern "C" void app_main() {
       imu_yaw = std::get<0>(*euler);
     }
 
-    printf("Now X: %f, Now Y: %f, Now Yaw: %f\n\r", debug_pose_x.load(),
-           debug_pose_y.load(), debug_pose_yaw.load());
+    printf("x: %f, y: %f, yaw: %f\n\r", debug_pose_x.load(), debug_pose_y.load(), debug_pose_yaw.load());
 
     halx::core::delay(10);
   }
@@ -196,17 +191,14 @@ void timer_callback(void *) {
   Velocity cmd_vel{
       0.5f * ps3.get_axis(PS3Axis::LEFT_X),
       0.5f * ps3.get_axis(PS3Axis::LEFT_Y),
-      -(std::numbers::pi / 2.0f) *
-          ps3.get_axis(
-              PS3Axis::RIGHT_X), // 反時計回りに正となるように符号を反転
+      -(std::numbers::pi / 2.0f) * ps3.get_axis(PS3Axis::RIGHT_X), // 反時計回りに正となるように符号を反転
   };
-  if (ps3.get_key_down(PS3Key::START)){
+  if (ps3.get_key_down(PS3Key::START)) {
     start_pose_sequence();
   }
   if (ps3.get_key_down(PS3Key::CROSS)) {
     start_return_home();
   }
-
 
   update_auto_control(robot_pose, cmd_vel);
 
@@ -221,8 +213,7 @@ void update_localization() {
   // 角度差分をとる
   float raw_yaw = imu_yaw;
   static float pre_raw_yaw = raw_yaw;
-  float delta_yaw =
-      -(raw_yaw - pre_raw_yaw); // 反時計回りに正となるように符号を反転
+  float delta_yaw = -(raw_yaw - pre_raw_yaw); // 反時計回りに正となるように符号を反転
   if (delta_yaw > std::numbers::pi) {
     delta_yaw -= 2.0f * std::numbers::pi;
   } else if (delta_yaw < -std::numbers::pi) {
@@ -234,13 +225,10 @@ void update_localization() {
   // オドメータの更新
   static float pre_x_position = x_encoder.get_position();
   static float pre_y_position = y_encoder.get_position();
-  const float rev_to_distance =
-      2.0f * std::numbers::pi *
-      ODOMETRY_WHEEL_RADIUS; // 1回転あたりの移動距離[m]
+  const float rev_to_distance = 2.0f * std::numbers::pi * ODOMETRY_WHEEL_RADIUS; // 1回転あたりの移動距離[m]
   float delta_x = (x_encoder.get_position() - pre_x_position) * rev_to_distance;
   float delta_y =
-      -(y_encoder.get_position() - pre_y_position) *
-      rev_to_distance; // y軸エンコーダが逆向きに回転するため符号を反転
+      -(y_encoder.get_position() - pre_y_position) * rev_to_distance; // y軸エンコーダが逆向きに回転するため符号を反転
   pre_x_position = x_encoder.get_position();
   pre_y_position = y_encoder.get_position();
 
@@ -277,9 +265,7 @@ void start_pose_sequence() {
   auto_control_mode = AutoControlMode::POSE_SEQUENCE;
 }
 
-void start_return_home() {
-  auto_control_mode = AutoControlMode::RETURN_HOME;
-}
+void start_return_home() { auto_control_mode = AutoControlMode::RETURN_HOME; }
 
 bool update_auto_control(const Pose &now_pose, Velocity &cmd_vel) {
   if (auto_control_mode == AutoControlMode::IDLE) {
@@ -291,17 +277,15 @@ bool update_auto_control(const Pose &now_pose, Velocity &cmd_vel) {
     return true;
   }
 
-
-  const Pose &target_pose = SEQUENCE_TARGET_POSES[sequence_target_index]; //目標ポイントを更新
+  const Pose &target_pose = SEQUENCE_TARGET_POSES[sequence_target_index]; // 目標ポイントを更新
   const float delta_x = target_pose.x - now_pose.x;
   const float delta_y = target_pose.y - now_pose.y;
-  const float position_error_squared = delta_x * delta_x + delta_y * delta_y; //目標ポイントとの差分を計算
-  constexpr float position_tolerance_squared =
-      SEQUENCE_POSITION_TOLERANCE * SEQUENCE_POSITION_TOLERANCE;
+  const float position_error_squared = delta_x * delta_x + delta_y * delta_y; // 目標ポイントとの差分を計算
+  constexpr float position_tolerance_squared = SEQUENCE_POSITION_TOLERANCE * SEQUENCE_POSITION_TOLERANCE;
 
   if (position_error_squared <= position_tolerance_squared) {
     ++sequence_target_index;
-    if (sequence_target_index >= SEQUENCE_TARGET_POSES.size()) { //シーケンス達成回数が設定した要素数を超えたら停止
+    if (sequence_target_index >= SEQUENCE_TARGET_POSES.size()) { // シーケンス達成回数が設定した要素数を超えたら停止
       auto_control_mode = AutoControlMode::IDLE;
       cmd_vel = {0.0f, 0.0f, 0.0f};
       return true;
@@ -312,8 +296,7 @@ bool update_auto_control(const Pose &now_pose, Velocity &cmd_vel) {
   return true;
 }
 
-void set_pose_target_velocity(const Pose &now_pose, const Pose &target_pose,
-                              Velocity &cmd_vel) {
+void set_pose_target_velocity(const Pose &now_pose, const Pose &target_pose, Velocity &cmd_vel) {
   const Velocity world_velocity = calc_p2p_velocity(now_pose, target_pose);
 
   const float cos_yaw = std::cos(now_pose.yaw);
@@ -323,33 +306,26 @@ void set_pose_target_velocity(const Pose &now_pose, const Pose &target_pose,
   cmd_vel.yaw = world_velocity.yaw;
 }
 
-void drive_wheels(const Velocity &cmd_vel) {
+void drive_wheels(const Velocity &velocity) {
   static PIDController motor1_pid(DRIVE_WHEEL_PID_PARAMS, CONTROL_DT);
   static PIDController motor2_pid(DRIVE_WHEEL_PID_PARAMS, CONTROL_DT);
   static PIDController motor3_pid(DRIVE_WHEEL_PID_PARAMS, CONTROL_DT);
 
-  float vr_vel = ROBOT_RADIUS * cmd_vel.yaw;
-  float vel2rps = 1.0f / (2.0f * std::numbers::pi * DRIVE_WHEEL_RADIUS);
+  constexpr float VEL2RPS = 1.0f / (2.0f * std::numbers::pi * DRIVE_WHEEL_RADIUS);
 
-  float motor1_target_rps =
-      (-cmd_vel.x * std::sin(DRIVE_WHEEL_THETA_1) +
-       cmd_vel.y * std::cos(DRIVE_WHEEL_THETA_1) + vr_vel) *
-      vel2rps;
-  float motor2_target_rps =
-      (-cmd_vel.x * std::sin(DRIVE_WHEEL_THETA_2) +
-       cmd_vel.y * std::cos(DRIVE_WHEEL_THETA_2) + vr_vel) *
-      vel2rps;
-  float motor3_target_rps =
-      (-cmd_vel.x * std::sin(DRIVE_WHEEL_THETA_3) +
-       cmd_vel.y * std::cos(DRIVE_WHEEL_THETA_3) + vr_vel) *
-      vel2rps;
+  float motor1_target_rps = (-velocity.x * std::sin(DRIVE_WHEEL_THETA_1) + velocity.y * std::cos(DRIVE_WHEEL_THETA_1) +
+                             ROBOT_RADIUS * velocity.yaw) *
+                            VEL2RPS;
+  float motor2_target_rps = (-velocity.x * std::sin(DRIVE_WHEEL_THETA_2) + velocity.y * std::cos(DRIVE_WHEEL_THETA_2) +
+                             ROBOT_RADIUS * velocity.yaw) *
+                            VEL2RPS;
+  float motor3_target_rps = (-velocity.x * std::sin(DRIVE_WHEEL_THETA_3) + velocity.y * std::cos(DRIVE_WHEEL_THETA_3) +
+                             ROBOT_RADIUS * velocity.yaw) *
+                            VEL2RPS;
 
-  float motor1_output =
-      motor1_pid.solve(motor1_target_rps - motor1_encoder.get_rps());
-  float motor2_output =
-      motor2_pid.solve(motor2_target_rps - motor2_encoder.get_rps());
-  float motor3_output =
-      motor3_pid.solve(motor3_target_rps - (-motor3_encoder.get_rps()));
+  float motor1_output = motor1_pid.solve(motor1_target_rps - motor1_encoder.get_rps());
+  float motor2_output = motor2_pid.solve(motor2_target_rps - motor2_encoder.get_rps());
+  float motor3_output = motor3_pid.solve(motor3_target_rps - (-motor3_encoder.get_rps()));
 
   motor1.set_output(motor1_output);
   motor2.set_output(motor2_output);
