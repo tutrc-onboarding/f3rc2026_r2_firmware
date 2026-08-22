@@ -2,3 +2,6 @@ build
 mx.scratch
 !.settings
 見本.cpp
+.settings/bundles-lock.store.json
+.settings/bundles.store.json
+.vscode/c_cpp_properties.json

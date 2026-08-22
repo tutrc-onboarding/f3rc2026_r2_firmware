@@ -117,10 +117,11 @@ struct Pose {
   float yaw; // [rad]
 };
 
-constexpr float SEQUENCE_POSITION_TOLERANCE = 0.05f;// [m]　許容誤差
-constexpr uint32_t WATERING_START_TICKS = 500;// [1/100秒]倉庫Bから白ブロックを運んでから何秒待って水やりを開始するか
-uint32_t competition_ticks = 0;//競技時間を計測
-bool competition_running = false;//計測のトリガー的な
+constexpr float SEQUENCE_POSITION_TOLERANCE = 0.05f; // [m]　許容誤差
+constexpr uint32_t WATERING_START_TICKS = 500; // [1/100秒]倉庫Bから白ブロックを運んでから何秒待って水やりを開始するか
+uint32_t competition_ticks = 0;                // 競技時間を計測
+uint32_t waiting_ticks = 0;                    // どんくらい待ってるか
+bool competition_running = false;              // 計測のトリガー的な
 
 // R2スタートゾーンの中心を原点、右を+x、上を+y
 constexpr Pose R2_START_POSE{0.0f, 0.0f, 0.0f};
@@ -139,12 +140,12 @@ enum class AutoControlMode {
   GET_BLOCK_AND_WATERING_CAN,
   C_TO_GARDEN,
   PUT_BLACK_BLOCK,
-  ///自動機がBの白ブロックを２個回収するかも、ということで書いておいた　使わないかも
+  /// 自動機がBの白ブロックを２個回収するかも、ということで書いておいた　使わないかも
   GARDEN_TO_B,
   GET_WHITE_BLOCK,
   B_TO_GARDEN,
   PUT_WHITE_BLOCK,
-  /// 
+  ///
   WAIT_FOR_WATERING,
   GARDEN_TO_C_WARTERING,
   C_TO_GARDEN_WARTERING,
@@ -240,19 +241,19 @@ void timer_callback(void *) {
       set_auto_control_mode(AutoControlMode::START_TO_C);
       break;
     }
-    //メモ　デバッグするときは下のコメントアウトを外してset_auto_control_modeをコメントアウトする
-    // if (ps3.get_key_down(PS3Key::LEFT)) {
-    //   block_holder_servo.set_position(BLOCK_HOLDER_OPEN_POSITION);
-    // }
-    // if (ps3.get_key_down(PS3Key::RIGHT)) {
-    //   block_holder_servo.set_position(BLOCK_HOLDER_CLOSED_POSITION);
-    // }
-    // if (ps3.get_key_down(PS3Key::UP)) {
-    //   watering_can_servo.set_position(WATERING_CAN_RELEASE_POSITION);
-    // }
-    // if (ps3.get_key_down(PS3Key::DOWN)) {
-    //   watering_can_servo.set_position(WATERING_CAN_COLLECT_POSITION);
-    // }
+    // メモ　デバッグするときは下のコメントアウトを外してset_auto_control_modeをコメントアウトする
+    //  if (ps3.get_key_down(PS3Key::LEFT)) {
+    //    block_holder_servo.set_position(BLOCK_HOLDER_OPEN_POSITION);
+    //  }
+    //  if (ps3.get_key_down(PS3Key::RIGHT)) {
+    //    block_holder_servo.set_position(BLOCK_HOLDER_CLOSED_POSITION);
+    //  }
+    //  if (ps3.get_key_down(PS3Key::UP)) {
+    //    watering_can_servo.set_position(WATERING_CAN_RELEASE_POSITION);
+    //  }
+    //  if (ps3.get_key_down(PS3Key::DOWN)) {
+    //    watering_can_servo.set_position(WATERING_CAN_COLLECT_POSITION);
+    //  }
 
     Velocity velocity;
     velocity.x = 0.5f * ps3.get_axis(PS3Axis::LEFT_X);
@@ -299,9 +300,10 @@ void timer_callback(void *) {
     break;
 
   case AutoControlMode::WAIT_FOR_WATERING:
-  //邪魔だったら待機場所を設定してもいいかも
+    waiting_ticks = waiting_ticks + 1;
+    // 邪魔だったら待機場所を設定してもいいかも
     stop_drive_wheels();
-    if (competition_ticks >= WATERING_START_TICKS) {
+    if (waiting_ticks >= WATERING_START_TICKS) {
       set_auto_control_mode(AutoControlMode::GARDEN_TO_C_WARTERING);
     }
     break;
@@ -319,7 +321,7 @@ void timer_callback(void *) {
     break;
 
   case AutoControlMode::A_TO_GARDEN_WARTERING:
-    move_to_pose(GARDEN_WATERING_POSE,AutoControlMode::GARDEN_TO_C_WARTERING);
+    move_to_pose(GARDEN_WATERING_POSE, AutoControlMode::GARDEN_TO_C_WARTERING);
     break;
   }
 
@@ -331,9 +333,7 @@ void timer_callback(void *) {
   debug_pose_yaw = robot_pose.yaw;
 }
 
-void set_auto_control_mode(AutoControlMode mode) {
-  auto_control_mode = mode;
-}
+void set_auto_control_mode(AutoControlMode mode) { auto_control_mode = mode; }
 
 void move_to_pose(const Pose &target_pose, AutoControlMode next_mode) {
   const float delta_x = target_pose.x - robot_pose.x;
@@ -355,7 +355,7 @@ void move_servo(FeetechPositionControl &servo, float target_position, AutoContro
   set_auto_control_mode(next_mode);
 }
 
-void collect_block_and_watering_can() {// ブロックとじょうろが同時に取れる前提で書いた
+void collect_block_and_watering_can() { // ブロックとじょうろが同時に取れる前提で書いた
   stop_drive_wheels();
   block_holder_servo.set_position(BLOCK_HOLDER_CLOSED_POSITION);
   watering_can_servo.set_position(WATERING_CAN_COLLECT_POSITION);
