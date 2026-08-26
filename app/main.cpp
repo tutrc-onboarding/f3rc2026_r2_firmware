@@ -186,8 +186,8 @@ extern "C" void app_main() {
 
   imu.start();
 
-  block_holder_servo.start();
-  watering_can_servo.start();
+  // block_holder_servo.start();
+  // watering_can_servo.start();
 
   ST_TIM<&htim6>::register_period_elapsed_callback(timer_callback, nullptr);
   ST_TIM<&htim6>::start_base_it();
@@ -197,8 +197,8 @@ extern "C" void app_main() {
       imu_yaw = std::get<0>(*euler);
     }
 
-    block_holder_servo.update();
-    watering_can_servo.update();
+    // block_holder_servo.update();
+    // watering_can_servo.update();
 
     printf("x: %f, y: %f, yaw: %f, block_pos: %f, watering_pos: %f\n\r", debug_pose_x.load(), debug_pose_y.load(),
            debug_pose_yaw.load(), block_holder_servo.get_position(), watering_can_servo.get_position());
@@ -235,8 +235,8 @@ void timer_callback(void *) {
       robot_pose = R2_START_POSE;
       competition_ticks = 0;
       competition_running = true;
-      block_holder_servo.set_position(BLOCK_HOLDER_OPEN_POSITION);
-      watering_can_servo.set_position(WATERING_CAN_RELEASE_POSITION);
+      // block_holder_servo.set_position(BLOCK_HOLDER_OPEN_POSITION);
+      // watering_can_servo.set_position(WATERING_CAN_RELEASE_POSITION);
       stop_drive_wheels();
       set_auto_control_mode(AutoControlMode::START_TO_C);
       break;
@@ -280,7 +280,7 @@ void timer_callback(void *) {
 
   case AutoControlMode::PUT_BLACK_BLOCK:
 
-    move_servo(block_holder_servo, BLOCK_HOLDER_OPEN_POSITION, AutoControlMode::GARDEN_TO_B);
+    // move_servo(block_holder_servo, BLOCK_HOLDER_OPEN_POSITION, AutoControlMode::GARDEN_TO_B);
     break;
 
   case AutoControlMode::GARDEN_TO_B:
@@ -288,7 +288,7 @@ void timer_callback(void *) {
     break;
 
   case AutoControlMode::GET_WHITE_BLOCK:
-    move_servo(block_holder_servo, BLOCK_HOLDER_CLOSED_POSITION, AutoControlMode::B_TO_GARDEN);
+    // move_servo(block_holder_servo, BLOCK_HOLDER_CLOSED_POSITION, AutoControlMode::B_TO_GARDEN);
     break;
 
   case AutoControlMode::B_TO_GARDEN:
@@ -296,7 +296,7 @@ void timer_callback(void *) {
     break;
 
   case AutoControlMode::PUT_WHITE_BLOCK:
-    move_servo(block_holder_servo, BLOCK_HOLDER_OPEN_POSITION, AutoControlMode::WAIT_FOR_WATERING);
+    // move_servo(block_holder_servo, BLOCK_HOLDER_OPEN_POSITION, AutoControlMode::WAIT_FOR_WATERING);
     break;
 
   case AutoControlMode::WAIT_FOR_WATERING:
@@ -351,14 +351,14 @@ void move_to_pose(const Pose &target_pose, AutoControlMode next_mode) {
 
 void move_servo(FeetechPositionControl &servo, float target_position, AutoControlMode next_mode) {
   stop_drive_wheels();
-  servo.set_position(target_position);
+  // servo.set_position(target_position);
   set_auto_control_mode(next_mode);
 }
 
 void collect_block_and_watering_can() { // ブロックとじょうろが同時に取れる前提で書いた
   stop_drive_wheels();
-  block_holder_servo.set_position(BLOCK_HOLDER_CLOSED_POSITION);
-  watering_can_servo.set_position(WATERING_CAN_COLLECT_POSITION);
+  // block_holder_servo.set_position(BLOCK_HOLDER_CLOSED_POSITION);
+  // watering_can_servo.set_position(WATERING_CAN_COLLECT_POSITION);
 }
 
 void update_localization() {
