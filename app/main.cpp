@@ -49,7 +49,7 @@ constexpr PIDParameters DRIVE_WHEEL_PID_PARAMS{
     .kp = 0.01f,
     .ki = 0.7f,
     .kd = 0.0f,
-    .output_upper_limit = 0.7f,
+    .output_upper_limit = 1.0f,
     .integral_upper_limit = 1.0f,
 };
 
@@ -96,8 +96,8 @@ constexpr float BLOCK_HOLDER_CLOSED_POSITION = 2000.0f / 4096.0f;
 constexpr float WATERING_CAN_RELEASE_POSITION = 0.0f / 4096.0f;
 constexpr float WATERING_CAN_COLLECT_POSITION = 2000.0f / 4096.0f;
 
-FeetechPositionControl block_holder_servo(uart5, 3, BLOCK_HOLDER_OPEN_POSITION, 100, 2000);
-FeetechPositionControl watering_can_servo(uart5, 4, WATERING_CAN_RELEASE_POSITION, 100, 2000);
+// FeetechPositionControl block_holder_servo(uart5, 3, BLOCK_HOLDER_OPEN_POSITION, 100, 2000);
+// FeetechPositionControl watering_can_servo(uart5, 4, WATERING_CAN_RELEASE_POSITION, 100, 2000);
 
 std::atomic<float> imu_yaw = 0.0f;
 
@@ -125,10 +125,10 @@ bool competition_running = false;              // 計測のトリガー的な
 
 // R2スタートゾーンの中心を原点、右を+x、上を+y
 constexpr Pose R2_START_POSE{0.0f, 0.0f, 0.0f};
-constexpr Pose WAREHOUSE_C_POSE{-1.60f, 0.075f, 0.0f};
-constexpr Pose WAREHOUSE_B_POSE{-1.60f, 0.90f, 0.0f};
+constexpr Pose WAREHOUSE_C_POSE{-1.60f, 0.075f, -0.5f * std::numbers::pi};
+constexpr Pose WAREHOUSE_B_POSE{-1.60f, 0.90f, -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_A_POSE{-1.60f, 1.725f, 0.0f};
-constexpr Pose GARDEN_BLACK_BLOCK_POSE{1.65f, 0.30f, 0.0f};
+constexpr Pose GARDEN_BLACK_BLOCK_POSE{1.65f, 0.30f, 0.5f * std::numbers::pi};
 constexpr Pose GARDEN_WHITE_BLOCK_POSE{1.65f, 0.90f, 0.0f};
 constexpr Pose GARDEN_WATERING_POSE{1.65f, 0.90f, 0.0f};
 
@@ -200,8 +200,8 @@ extern "C" void app_main() {
     // block_holder_servo.update();
     // watering_can_servo.update();
 
-    printf("x: %f, y: %f, yaw: %f, block_pos: %f, watering_pos: %f\n\r", debug_pose_x.load(), debug_pose_y.load(),
-           debug_pose_yaw.load(), block_holder_servo.get_position(), watering_can_servo.get_position());
+    // printf("x: %f, y: %f, yaw: %f, block_pos: %f, watering_pos: %f\n\r", debug_pose_x.load(), debug_pose_y.load(),
+    //        debug_pose_yaw.load(), block_holder_servo.get_position(), watering_can_servo.get_position());
 
     halx::core::delay(10);
   }
@@ -281,6 +281,7 @@ void timer_callback(void *) {
   case AutoControlMode::PUT_BLACK_BLOCK:
 
     // move_servo(block_holder_servo, BLOCK_HOLDER_OPEN_POSITION, AutoControlMode::GARDEN_TO_B);
+    set_auto_control_mode(AutoControlMode::GARDEN_TO_B);
     break;
 
   case AutoControlMode::GARDEN_TO_B:
