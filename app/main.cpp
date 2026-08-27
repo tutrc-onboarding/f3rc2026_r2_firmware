@@ -91,13 +91,13 @@ Motor<&htim20> motor3(TIM_CHANNEL_1, motor3_pin);
 PS3 ps3(uart4);
 BNO055<&hi2c3> imu;
 
-constexpr float BLOCK_HOLDER_OPEN_POSITION = 100.0f / 4096.0f;
-constexpr float BLOCK_HOLDER_CLOSED_POSITION = 2000.0f / 4096.0f;
-constexpr float WATERING_CAN_RELEASE_POSITION = 0.0f / 4096.0f;
-constexpr float WATERING_CAN_COLLECT_POSITION = 2000.0f / 4096.0f;
+constexpr int BLOCK_HOLDER_OPEN_POSITION = 521;
+constexpr int BLOCK_HOLDER_CLOSED_POSITION = 2028;
+constexpr int WATERING_CAN_RELEASE_POSITION = 1015;
+constexpr int WATERING_CAN_COLLECT_POSITION = 1560;
 
-// FeetechPositionControl block_holder_servo(uart5, 3, BLOCK_HOLDER_OPEN_POSITION, 100, 2000);
-// FeetechPositionControl watering_can_servo(uart5, 4, WATERING_CAN_RELEASE_POSITION, 100, 2000);
+FeetechPositionControl block_holder_servo(uart5, 1, 521);  // 521-3353   2028でブロックを回収する
+FeetechPositionControl watering_can_servo(uart5, 2, 1015); // 1015-1560
 
 std::atomic<float> imu_yaw = 0.0f;
 
@@ -171,7 +171,7 @@ void drive_wheels(const Velocity &cmd_vel);
 void stop_drive_wheels();
 void set_auto_control_mode(AutoControlMode mode);
 void move_to_pose(const Pose &target_pose, AutoControlMode next_mode);
-void move_servo(FeetechPositionControl &servo, float target_position, AutoControlMode next_mode);
+void move_servo(FeetechPositionControl &servo, float target_position);
 void collect_block_and_watering_can();
 extern "C" void app_main() {
   halx::driver::enable_stdout(lpuart1);
@@ -192,8 +192,8 @@ extern "C" void app_main() {
 
   imu.start();
 
-  // block_holder_servo.start();
-  // watering_can_servo.start();
+  block_holder_servo.start();
+  watering_can_servo.start();
 
   ST_TIM<&htim6>::register_period_elapsed_callback(timer_callback, nullptr);
   ST_TIM<&htim6>::start_base_it();
@@ -203,12 +203,13 @@ extern "C" void app_main() {
       imu_yaw = std::get<0>(*euler);
     }
 
-    // block_holder_servo.update();
-    // watering_can_servo.update();
+    block_holder_servo.update();
+    watering_can_servo.update();
 
     // printf("x: %f, y: %f, yaw: %f, block_pos: %f, watering_pos: %f\n\r", debug_pose_x.load(), debug_pose_y.load(),
     //        debug_pose_yaw.load(), block_holder_servo.get_position(), watering_can_servo.get_position());
-
+    printf("block_holder_pos %d\n\r", static_cast<int>(block_holder_servo.get_position()));
+    printf("yaw %f\n\r", debug_pose_yaw.load());
     halx::core::delay(10);
   }
 }
@@ -248,18 +249,24 @@ void timer_callback(void *) {
       break;
     }
     // メモ　デバッグするときは下のコメントアウトを外してset_auto_control_modeをコメントアウトする
-    //  if (ps3.get_key_down(PS3Key::LEFT)) {
-    //    block_holder_servo.set_position(BLOCK_HOLDER_OPEN_POSITION);
-    //  }
-    //  if (ps3.get_key_down(PS3Key::RIGHT)) {
-    //    block_holder_servo.set_position(BLOCK_HOLDER_CLOSED_POSITION);
-    //  }
-    //  if (ps3.get_key_down(PS3Key::UP)) {
-    //    watering_can_servo.set_position(WATERING_CAN_RELEASE_POSITION);
-    //  }
-    //  if (ps3.get_key_down(PS3Key::DOWN)) {
-    //    watering_can_servo.set_position(WATERING_CAN_COLLECT_POSITION);
-    //  }
+    if (ps3.get_key_down(PS3Key::LEFT)) {
+      block_holder_servo.set_position(BLOCK_HOLDER_OPEN_POSITION);
+    }
+    if (ps3.get_key_down(PS3Key::RIGHT)) {
+      block_holder_servo.set_position(BLOCK_HOLDER_CLOSED_POSITION);
+    }
+    if (ps3.get_key_down(PS3Key::UP)) {
+      watering_can_servo.set_position(WATERING_CAN_RELEASE_POSITION);
+    }
+    if (ps3.get_key_down(PS3Key::DOWN)) {
+      watering_can_servo.set_position(WATERING_CAN_COLLECT_POSITION);
+    }
+    if (ps3.get_key_down(PS3Key::R2)) {
+      block_holder_servo.set_position(block_holder_servo.get_position() + 10);
+    }
+    if (ps3.get_key_down(PS3Key::L2)) {
+      block_holder_servo.set_position(block_holder_servo.get_position() - 10);
+    }
 
     Velocity velocity;
     velocity.x = 0.5f * ps3.get_axis(PS3Axis::LEFT_X);
@@ -269,7 +276,7 @@ void timer_callback(void *) {
     break;
   }
   // move_to_pose(行く場所, 次の動作)
-  // move_servo(動かすサーボ, set_position, 次の動作)
+  // move_servo(動かすサーボ, set_position)
   case AutoControlMode::START_TO_C:
     move_to_pose(WAREHOUSE_C_POSE, AutoControlMode::GET_BLOCK_AND_WATERING_CAN);
     break;
@@ -286,7 +293,7 @@ void timer_callback(void *) {
 
   case AutoControlMode::PUT_BLACK_BLOCK:
 
-    // move_servo(block_holder_servo, BLOCK_HOLDER_OPEN_POSITION, AutoControlMode::GARDEN_TO_B);
+    move_servo(block_holder_servo, BLOCK_HOLDER_OPEN_POSITION);
     move_to_pose(GARDEN_BLACK_BLOCK_EXIT_POSE, AutoControlMode::GARDEN_TO_B);
     break;
 
@@ -295,7 +302,7 @@ void timer_callback(void *) {
     break;
 
   case AutoControlMode::GET_WHITE_BLOCK:
-    // move_servo(block_holder_servo, BLOCK_HOLDER_CLOSED_POSITION, AutoControlMode::B_TO_GARDEN);
+    move_servo(block_holder_servo, BLOCK_HOLDER_CLOSED_POSITION);
     move_to_pose(WAREHOUSE_B_EXIT_POSE, AutoControlMode::B_TO_GARDEN);
     break;
 
@@ -304,7 +311,7 @@ void timer_callback(void *) {
     break;
 
   case AutoControlMode::PUT_WHITE_BLOCK:
-    // move_servo(block_holder_servo, BLOCK_HOLDER_OPEN_POSITION, AutoControlMode::WAIT_FOR_WATERING);
+    move_servo(block_holder_servo, BLOCK_HOLDER_OPEN_POSITION);
 
     move_to_pose(GARDEN_WHITE_BLOCK_EXIT_POSE, AutoControlMode::WAIT_FOR_WATERING);
     break;
@@ -361,16 +368,15 @@ void move_to_pose(const Pose &target_pose, AutoControlMode next_mode) {
   drive_wheels(calculate_velocity(robot_pose, target_pose));
 }
 
-void move_servo(FeetechPositionControl &servo, float target_position, AutoControlMode next_mode) {
+void move_servo(FeetechPositionControl &servo, float target_position) {
   stop_drive_wheels();
-  // servo.set_position(target_position);
-  set_auto_control_mode(next_mode);
+  servo.set_position(target_position);
 }
 
 void collect_block_and_watering_can() { // ブロックとじょうろが同時に取れる前提で書いた
   stop_drive_wheels();
-  // block_holder_servo.set_position(BLOCK_HOLDER_CLOSED_POSITION);
-  // watering_can_servo.set_position(WATERING_CAN_COLLECT_POSITION);
+  block_holder_servo.set_position(BLOCK_HOLDER_CLOSED_POSITION);
+  watering_can_servo.set_position(WATERING_CAN_COLLECT_POSITION);
 }
 
 void update_localization() {
