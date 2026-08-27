@@ -55,11 +55,11 @@ constexpr PIDParameters DRIVE_WHEEL_PID_PARAMS{
 
 constexpr PIDParameters P2P_X_PID_PARAMS{
     .kp = 1.0f,
-    .output_upper_limit = 0.5f,
+    .output_upper_limit = 0.3f,
 };
 constexpr PIDParameters P2P_Y_PID_PARAMS{
     .kp = 1.0f,
-    .output_upper_limit = 0.5f,
+    .output_upper_limit = 0.3f,
 };
 constexpr PIDParameters P2P_YAW_PID_PARAMS{
     .kp = 1.0f,
@@ -118,19 +118,27 @@ struct Pose {
 };
 
 constexpr float SEQUENCE_POSITION_TOLERANCE = 0.05f; // [m]　許容誤差
+constexpr float SEQUENCE_YAW_TOLERANCE = 0.05f;      // [rad]
 constexpr uint32_t WATERING_START_TICKS = 500; // [1/100秒]倉庫Bから白ブロックを運んでから何秒待って水やりを開始するか
 uint32_t competition_ticks = 0;                // 競技時間を計測
 uint32_t waiting_ticks = 0;                    // どんくらい待ってるか
 bool competition_running = false;              // 計測のトリガー的な
 
 // R2スタートゾーンの中心を原点、右を+x、上を+y
-constexpr Pose R2_START_POSE{0.0f, 0.0f, 0.0f};
+constexpr Pose R2_START_POSE{0.0f, 0.0f, -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_C_POSE{-1.60f, 0.075f, -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_B_POSE{-1.60f, 0.90f, -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_A_POSE{-1.60f, 1.725f, 0.0f};
 constexpr Pose GARDEN_BLACK_BLOCK_POSE{1.65f, 0.30f, 0.5f * std::numbers::pi};
-constexpr Pose GARDEN_WHITE_BLOCK_POSE{1.65f, 0.90f, 0.0f};
-constexpr Pose GARDEN_WATERING_POSE{1.65f, 0.90f, 0.0f};
+constexpr Pose GARDEN_WHITE_BLOCK_POSE{1.65f, 0.90f, 0.5 * std::numbers::pi};
+constexpr Pose GARDEN_WATERING_POSE{1.65f, 1.20f, 0.0f};
+// ↓回転後の座標
+constexpr Pose WAREHOUSE_C_EXIT_POSE{WAREHOUSE_C_POSE.x, WAREHOUSE_C_POSE.y, 0.5f * std::numbers::pi};
+constexpr Pose GARDEN_BLACK_BLOCK_EXIT_POSE{GARDEN_BLACK_BLOCK_POSE.x, GARDEN_BLACK_BLOCK_POSE.y,
+                                            -0.5f * std::numbers::pi};
+constexpr Pose WAREHOUSE_B_EXIT_POSE{WAREHOUSE_B_POSE.x, WAREHOUSE_B_POSE.y, 0.5f * std::numbers::pi};
+constexpr Pose GARDEN_WHITE_BLOCK_EXIT_POSE{GARDEN_WHITE_BLOCK_POSE.x, GARDEN_WHITE_BLOCK_POSE.y,
+                                            -0.5f * std::numbers::pi};
 
 // コントロールモード一覧
 enum class AutoControlMode {
@@ -151,7 +159,6 @@ enum class AutoControlMode {
   C_TO_GARDEN_WARTERING,
   GARDEN_TO_A_WARTERING,
   A_TO_GARDEN_WARTERING,
-
 };
 
 Pose robot_pose = R2_START_POSE;
@@ -166,7 +173,6 @@ void set_auto_control_mode(AutoControlMode mode);
 void move_to_pose(const Pose &target_pose, AutoControlMode next_mode);
 void move_servo(FeetechPositionControl &servo, float target_position, AutoControlMode next_mode);
 void collect_block_and_watering_can();
-
 extern "C" void app_main() {
   halx::driver::enable_stdout(lpuart1);
 
@@ -271,7 +277,7 @@ void timer_callback(void *) {
   case AutoControlMode::GET_BLOCK_AND_WATERING_CAN:
     collect_block_and_watering_can();
     // 場所が無かったからここにCに行く動作を書いた
-    set_auto_control_mode(AutoControlMode::C_TO_GARDEN);
+    move_to_pose(WAREHOUSE_C_EXIT_POSE, AutoControlMode::C_TO_GARDEN);
     break;
 
   case AutoControlMode::C_TO_GARDEN:
@@ -281,7 +287,7 @@ void timer_callback(void *) {
   case AutoControlMode::PUT_BLACK_BLOCK:
 
     // move_servo(block_holder_servo, BLOCK_HOLDER_OPEN_POSITION, AutoControlMode::GARDEN_TO_B);
-    set_auto_control_mode(AutoControlMode::GARDEN_TO_B);
+    move_to_pose(GARDEN_BLACK_BLOCK_EXIT_POSE, AutoControlMode::GARDEN_TO_B);
     break;
 
   case AutoControlMode::GARDEN_TO_B:
@@ -290,6 +296,7 @@ void timer_callback(void *) {
 
   case AutoControlMode::GET_WHITE_BLOCK:
     // move_servo(block_holder_servo, BLOCK_HOLDER_CLOSED_POSITION, AutoControlMode::B_TO_GARDEN);
+    move_to_pose(WAREHOUSE_B_EXIT_POSE, AutoControlMode::B_TO_GARDEN);
     break;
 
   case AutoControlMode::B_TO_GARDEN:
@@ -298,6 +305,8 @@ void timer_callback(void *) {
 
   case AutoControlMode::PUT_WHITE_BLOCK:
     // move_servo(block_holder_servo, BLOCK_HOLDER_OPEN_POSITION, AutoControlMode::WAIT_FOR_WATERING);
+
+    move_to_pose(GARDEN_WHITE_BLOCK_EXIT_POSE, AutoControlMode::WAIT_FOR_WATERING);
     break;
 
   case AutoControlMode::WAIT_FOR_WATERING:
@@ -339,9 +348,11 @@ void set_auto_control_mode(AutoControlMode mode) { auto_control_mode = mode; }
 void move_to_pose(const Pose &target_pose, AutoControlMode next_mode) {
   const float delta_x = target_pose.x - robot_pose.x;
   const float delta_y = target_pose.y - robot_pose.y;
+  const float delta_yaw = std::remainder(target_pose.yaw - robot_pose.yaw, 2.0f * std::numbers::pi);
   constexpr float POSITION_TOLERANCE_SQUARED = SEQUENCE_POSITION_TOLERANCE * SEQUENCE_POSITION_TOLERANCE;
 
-  if (delta_x * delta_x + delta_y * delta_y <= POSITION_TOLERANCE_SQUARED) {
+  if (delta_x * delta_x + delta_y * delta_y <= POSITION_TOLERANCE_SQUARED &&
+      std::abs(delta_yaw) <= SEQUENCE_YAW_TOLERANCE) {
     stop_drive_wheels();
     set_auto_control_mode(next_mode);
     return;
@@ -404,7 +415,8 @@ Velocity calculate_velocity(const Pose &now_pose, const Pose &target_pose) {
   Velocity world_velocity;
   world_velocity.x = p2p_x_pid.solve(target_pose.x - now_pose.x);
   world_velocity.y = p2p_y_pid.solve(target_pose.y - now_pose.y);
-  world_velocity.yaw = p2p_yaw_pid.solve(target_pose.yaw - now_pose.yaw);
+  const float yaw_error = std::remainder(target_pose.yaw - now_pose.yaw, 2.0f * std::numbers::pi);
+  world_velocity.yaw = p2p_yaw_pid.solve(yaw_error);
 
   Velocity robot_velocity;
   robot_velocity.x = world_velocity.x * std::cos(now_pose.yaw) + world_velocity.y * std::sin(now_pose.yaw);
