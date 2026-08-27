@@ -93,11 +93,11 @@ BNO055<&hi2c3> imu;
 
 constexpr int BLOCK_HOLDER_OPEN_POSITION = 521;
 constexpr int BLOCK_HOLDER_CLOSED_POSITION = 2028;
-constexpr int WATERING_CAN_RELEASE_POSITION = 1560;
+constexpr int WATERING_CAN_RELEASE_POSITION = 2500;
 constexpr int WATERING_CAN_COLLECT_POSITION = 1015;
 
 FeetechPositionControl block_holder_servo(uart5, 1, 521);  // 521-3353   2028でブロックを回収する
-FeetechPositionControl watering_can_servo(uart5, 2, 1015); // 1015-1560
+FeetechPositionControl watering_can_servo(uart5, 2, 2500); // 1015-2500
 
 std::atomic<float> imu_yaw = 0.0f;
 
