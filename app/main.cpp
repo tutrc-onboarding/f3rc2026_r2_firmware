@@ -126,10 +126,12 @@ struct Pose {
   float yaw; // [rad]
 };
 
-constexpr float SEQUENCE_POSITION_TOLERANCE = 0.025f; // [m]　許容誤差
-constexpr float SEQUENCE_YAW_TOLERANCE = 0.05f;       // [rad]
-constexpr float BLOCK_BACK_DISTANCE = 0.35f;          // [m] ブロック配置後の後退距離
-constexpr uint32_t WAIT_TICKS_MECHA = 50;             // [1/100秒] 回収・設置後に～秒待つ
+constexpr float SEQUENCE_X_POSITION_TOLERANCE = 0.01f; // [m] x軸方向の許容誤差
+constexpr float SEQUENCE_Y_POSITION_TOLERANCE = 0.05f; // [m] y軸方向の許容誤差
+constexpr float SEQUENCE_YAW_TOLERANCE = 0.025f;       // [rad] 角度の許容誤差
+constexpr float WAREHOUSE_C_ENTRY_MAX_SPEED = 0.15f;   // [m/s] 待機点から回収点までの最大並進速度
+constexpr float BLOCK_BACK_DISTANCE = 0.35f;           // [m] ブロック配置後の後退距離
+constexpr uint32_t WAIT_TICKS_MECHA = 50;              // [1/100秒] 回収・設置後に～秒待つ
 constexpr uint32_t WATERING_START_TICKS = 500; // [1/100秒]倉庫Bから白ブロックを運んでから何秒待って水やりを開始するか
 uint32_t competition_ticks = 0;                // 競技時間を計測
 uint32_t waiting_ticks = 0;                    // どんくらい待ってるか
@@ -138,6 +140,7 @@ bool competition_running = false; // 計測のトリガー的な
 
 // R2スタートゾーンの中心を原点、右を+x、上を+y
 constexpr Pose R2_START_POSE{0.0f, 0.0f, -0.5f * std::numbers::pi};
+constexpr Pose WAREHOUSE_C_WAIT_POSE{-1.40f, 0.075f, -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_C_POSE{-1.60f, 0.075f, -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_B_POSE{-1.60f, 0.90f, -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_A_POSE{-1.60f, 1.725f, 0.0f};
@@ -161,6 +164,7 @@ enum class AutoControlMode {
   EMERGENCY_STOP,
   MANUAL,
   START_TO_C,
+  ENTER_WAREHOUSE_C,
   GET_BLOCK_AND_WATERING_CAN,
   WAIT_GET_BLOCK_AND_WATERING_CAN,
   EXIT_WAREHOUSE_C,
@@ -198,7 +202,7 @@ void drive_wheels(const Velocity &cmd_vel);
 void stop_drive_wheels();
 void stop_drive_wheels_for_pause();
 void set_auto_control_mode(AutoControlMode mode);
-void move_to_pose(const Pose &target_pose, AutoControlMode next_mode);
+void move_to_pose(const Pose &target_pose, AutoControlMode next_mode, float max_translation_speed = 0.0f);
 void wait_for_mecha(AutoControlMode next_mode);
 void move_servo(FeetechPositionControl &servo, float target_position);
 void collect_block_and_watering_can();
@@ -308,7 +312,11 @@ void timer_callback(void *) {
   // move_to_pose(行く場所, 次の動作)
   // move_servo(動かすサーボ, set_position)
   case AutoControlMode::START_TO_C:
-    move_to_pose(WAREHOUSE_C_POSE, AutoControlMode::GET_BLOCK_AND_WATERING_CAN);
+    move_to_pose(WAREHOUSE_C_WAIT_POSE, AutoControlMode::ENTER_WAREHOUSE_C);
+    break;
+
+  case AutoControlMode::ENTER_WAREHOUSE_C:
+    move_to_pose(WAREHOUSE_C_POSE, AutoControlMode::GET_BLOCK_AND_WATERING_CAN, WAREHOUSE_C_ENTRY_MAX_SPEED);
     break;
 
   case AutoControlMode::GET_BLOCK_AND_WATERING_CAN:
@@ -431,20 +439,32 @@ void wait_for_mecha(AutoControlMode next_mode) {
   }
 }
 
-void move_to_pose(const Pose &target_pose, AutoControlMode next_mode) {
+void move_to_pose(const Pose &target_pose, AutoControlMode next_mode, float max_translation_speed) {
   const float delta_x = target_pose.x - robot_pose.x;
   const float delta_y = target_pose.y - robot_pose.y;
   const float delta_yaw = std::remainder(target_pose.yaw - robot_pose.yaw, 2.0f * std::numbers::pi);
-  constexpr float POSITION_TOLERANCE_SQUARED = SEQUENCE_POSITION_TOLERANCE * SEQUENCE_POSITION_TOLERANCE;
 
-  if (delta_x * delta_x + delta_y * delta_y <= POSITION_TOLERANCE_SQUARED &&
+  if (std::abs(delta_x) <= SEQUENCE_X_POSITION_TOLERANCE &&
+      std::abs(delta_y) <= SEQUENCE_Y_POSITION_TOLERANCE &&
       std::abs(delta_yaw) <= SEQUENCE_YAW_TOLERANCE) {
     stop_drive_wheels();
     set_auto_control_mode(next_mode);
     return;
   }
 
-  drive_wheels(calculate_velocity(robot_pose, target_pose));
+  Velocity target_velocity = calculate_velocity(robot_pose, target_pose);
+  if (max_translation_speed > 0.0f) {
+    const float translation_speed_squared =
+        target_velocity.x * target_velocity.x + target_velocity.y * target_velocity.y;
+    const float max_translation_speed_squared = max_translation_speed * max_translation_speed;
+    if (translation_speed_squared > max_translation_speed_squared) {
+      const float speed_ratio = max_translation_speed / std::sqrt(translation_speed_squared);
+      target_velocity.x *= speed_ratio;
+      target_velocity.y *= speed_ratio;
+    }
+  }
+
+  drive_wheels(target_velocity);
 }
 
 void move_servo(FeetechPositionControl &servo, float target_position) {
