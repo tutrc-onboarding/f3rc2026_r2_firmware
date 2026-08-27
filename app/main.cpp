@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdio>
@@ -115,6 +116,10 @@ struct Velocity {
   float yaw; // [rad/s]
 };
 
+constexpr float MAX_IDOU_ACCEL = 1.2f; // [m/s^2]
+constexpr float MAX_YAW_ACCEL = 6.0f;  // [rad/s^2]
+Velocity pre_velocity{0.0f, 0.0f, 0.0f};
+
 struct Pose {
   float x;   // [m]
   float y;   // [m]
@@ -188,6 +193,7 @@ AutoControlMode auto_control_mode = AutoControlMode::EMERGENCY_STOP;
 void timer_callback(void *);
 void update_localization();
 Velocity calculate_velocity(const Pose &now_pose, const Pose &target_pose);
+Velocity limit_acceleration(const Velocity &target_velocity);
 void drive_wheels(const Velocity &cmd_vel);
 void stop_drive_wheels();
 void stop_drive_wheels_for_pause();
@@ -505,7 +511,30 @@ Velocity calculate_velocity(const Pose &now_pose, const Pose &target_pose) {
   return robot_velocity;
 }
 
-void drive_wheels(const Velocity &velocity) {
+Velocity limit_acceleration(const Velocity &target_velocity) {
+  const float max_idou_delta = MAX_IDOU_ACCEL * CONTROL_DT; // velocity
+  float delta_x = target_velocity.x - pre_velocity.x;
+  float delta_y = target_velocity.y - pre_velocity.y;
+  const float idou_delta = std::hypot(delta_x, delta_y); // 二条和の平方根
+
+  if (idou_delta > max_idou_delta) {
+    const float ratio = max_idou_delta / idou_delta;
+    delta_x *= ratio;
+    delta_y *= ratio;
+  }
+
+  pre_velocity.x += delta_x;
+  pre_velocity.y += delta_y;
+
+  const float max_yaw_delta = MAX_YAW_ACCEL * CONTROL_DT;
+  pre_velocity.yaw += std::clamp(target_velocity.yaw - pre_velocity.yaw, -max_yaw_delta,
+                                 max_yaw_delta); // 足し算って感じじゃないのでclamp
+
+  return pre_velocity;
+}
+
+void drive_wheels(const Velocity &target_velocity) {
+  const Velocity velocity = limit_acceleration(target_velocity);
   constexpr float VEL2RPS = 1.0f / (2.0f * std::numbers::pi * DRIVE_WHEEL_RADIUS);
 
   float motor1_target_rps = (-velocity.x * std::sin(DRIVE_WHEEL_THETA_1) + velocity.y * std::cos(DRIVE_WHEEL_THETA_1) +
@@ -528,6 +557,8 @@ void drive_wheels(const Velocity &velocity) {
 }
 
 void stop_drive_wheels() {
+  pre_velocity = {0.0f, 0.0f, 0.0f};
+
   motor1.set_output(0.0f);
   motor2.set_output(0.0f);
   motor3.set_output(0.0f);
