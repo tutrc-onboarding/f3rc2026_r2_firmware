@@ -46,7 +46,7 @@ constexpr float DRIVE_WHEEL_THETA_2 = std::numbers::pi * 5.0f / 6.0f;
 constexpr float DRIVE_WHEEL_THETA_3 = std::numbers::pi * 3.0f / 2.0f;
 
 constexpr PIDParameters DRIVE_WHEEL_PID_PARAMS{
-    .kp = 0.01f,
+    .kp = 0.03f,
     .ki = 0.7f,
     .kd = 0.0f,
     .output_upper_limit = 1.0f,
@@ -54,16 +54,16 @@ constexpr PIDParameters DRIVE_WHEEL_PID_PARAMS{
 };
 
 constexpr PIDParameters P2P_X_PID_PARAMS{
-    .kp = 1.0f,
-    .output_upper_limit = 0.3f,
+    .kp = 1.5f,
+    .output_upper_limit = 0.5f,
 };
 constexpr PIDParameters P2P_Y_PID_PARAMS{
-    .kp = 1.0f,
-    .output_upper_limit = 0.3f,
+    .kp = 1.5f,
+    .output_upper_limit = 0.5f,
 };
 constexpr PIDParameters P2P_YAW_PID_PARAMS{
-    .kp = 1.0f,
-    .output_upper_limit = std::numbers::pi / 2.0f,
+    .kp = 2.0f,
+    .output_upper_limit = std::numbers::pi,
 };
 
 UART_IT<&hlpuart1> lpuart1;
