@@ -9,7 +9,7 @@
 
 class FeetechPositionControl {
 public:
-  FeetechPositionControl(halx::driver::UARTBase &uart, uint8_t id, float initial_position)
+  FeetechPositionControl(halx::driver::UARTBase &uart, uint8_t id, int16_t initial_position)
       : servo_{uart, id}, position_target_{initial_position} {}
 
   void start() {
