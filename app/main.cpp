@@ -117,10 +117,10 @@ struct Pose {
   float yaw; // [rad]
 };
 
-constexpr float SEQUENCE_POSITION_TOLERANCE = 0.05f; // [m]　許容誤差
-constexpr float SEQUENCE_YAW_TOLERANCE = 0.05f;      // [rad]
-constexpr float BLOCK_BACK_DISTANCE = 0.35f;         // [m] ブロック配置後の後退距離
-constexpr uint32_t WAIT_TICKS_MECHA = 50;            // [1/100秒] 回収・設置後に～秒待つ
+constexpr float SEQUENCE_POSITION_TOLERANCE = 0.025f; // [m]　許容誤差
+constexpr float SEQUENCE_YAW_TOLERANCE = 0.05f;       // [rad]
+constexpr float BLOCK_BACK_DISTANCE = 0.35f;          // [m] ブロック配置後の後退距離
+constexpr uint32_t WAIT_TICKS_MECHA = 50;             // [1/100秒] 回収・設置後に～秒待つ
 constexpr uint32_t WATERING_START_TICKS = 500; // [1/100秒]倉庫Bから白ブロックを運んでから何秒待って水やりを開始するか
 uint32_t competition_ticks = 0;                // 競技時間を計測
 uint32_t waiting_ticks = 0;                    // どんくらい待ってるか
