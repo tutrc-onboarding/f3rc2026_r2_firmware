@@ -88,6 +88,10 @@ Motor<&htim15> motor1(TIM_CHANNEL_1, motor1_pin);
 Motor<&htim20> motor2(TIM_CHANNEL_2, motor2_pin);
 Motor<&htim20> motor3(TIM_CHANNEL_1, motor3_pin);
 
+PIDController motor1_pid(DRIVE_WHEEL_PID_PARAMS, CONTROL_DT);
+PIDController motor2_pid(DRIVE_WHEEL_PID_PARAMS, CONTROL_DT);
+PIDController motor3_pid(DRIVE_WHEEL_PID_PARAMS, CONTROL_DT);
+
 PS3 ps3(uart4);
 BNO055<&hi2c3> imu;
 
@@ -502,10 +506,6 @@ Velocity calculate_velocity(const Pose &now_pose, const Pose &target_pose) {
 }
 
 void drive_wheels(const Velocity &velocity) {
-  static PIDController motor1_pid(DRIVE_WHEEL_PID_PARAMS, CONTROL_DT);
-  static PIDController motor2_pid(DRIVE_WHEEL_PID_PARAMS, CONTROL_DT);
-  static PIDController motor3_pid(DRIVE_WHEEL_PID_PARAMS, CONTROL_DT);
-
   constexpr float VEL2RPS = 1.0f / (2.0f * std::numbers::pi * DRIVE_WHEEL_RADIUS);
 
   float motor1_target_rps = (-velocity.x * std::sin(DRIVE_WHEEL_THETA_1) + velocity.y * std::cos(DRIVE_WHEEL_THETA_1) +
@@ -531,6 +531,10 @@ void stop_drive_wheels() {
   motor1.set_output(0.0f);
   motor2.set_output(0.0f);
   motor3.set_output(0.0f);
+
+  motor1_pid = PIDController(DRIVE_WHEEL_PID_PARAMS, CONTROL_DT);
+  motor2_pid = PIDController(DRIVE_WHEEL_PID_PARAMS, CONTROL_DT);
+  motor3_pid = PIDController(DRIVE_WHEEL_PID_PARAMS, CONTROL_DT);
 }
 
 void stop_drive_wheels_for_pause() {
