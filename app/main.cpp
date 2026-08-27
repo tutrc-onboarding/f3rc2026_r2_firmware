@@ -93,8 +93,8 @@ BNO055<&hi2c3> imu;
 
 constexpr int BLOCK_HOLDER_OPEN_POSITION = 521;
 constexpr int BLOCK_HOLDER_CLOSED_POSITION = 2028;
-constexpr int WATERING_CAN_RELEASE_POSITION = 1015;
-constexpr int WATERING_CAN_COLLECT_POSITION = 1560;
+constexpr int WATERING_CAN_RELEASE_POSITION = 1560;
+constexpr int WATERING_CAN_COLLECT_POSITION = 1015;
 
 FeetechPositionControl block_holder_servo(uart5, 1, 521);  // 521-3353   2028でブロックを回収する
 FeetechPositionControl watering_can_servo(uart5, 2, 1015); // 1015-1560
@@ -119,10 +119,13 @@ struct Pose {
 
 constexpr float SEQUENCE_POSITION_TOLERANCE = 0.05f; // [m]　許容誤差
 constexpr float SEQUENCE_YAW_TOLERANCE = 0.05f;      // [rad]
+constexpr float BLOCK_BACK_DISTANCE = 0.35f;         // [m] ブロック配置後の後退距離
+constexpr uint32_t WAIT_TICKS_MECHA = 50;            // [1/100秒] 回収・設置後に～秒待つ
 constexpr uint32_t WATERING_START_TICKS = 500; // [1/100秒]倉庫Bから白ブロックを運んでから何秒待って水やりを開始するか
 uint32_t competition_ticks = 0;                // 競技時間を計測
 uint32_t waiting_ticks = 0;                    // どんくらい待ってるか
-bool competition_running = false;              // 計測のトリガー的な
+uint32_t waiting_ticks_mecha = 0;
+bool competition_running = false; // 計測のトリガー的な
 
 // R2スタートゾーンの中心を原点、右を+x、上を+y
 constexpr Pose R2_START_POSE{0.0f, 0.0f, -0.5f * std::numbers::pi};
@@ -132,12 +135,16 @@ constexpr Pose WAREHOUSE_A_POSE{-1.60f, 1.725f, 0.0f};
 constexpr Pose GARDEN_BLACK_BLOCK_POSE{1.65f, 0.30f, 0.5f * std::numbers::pi};
 constexpr Pose GARDEN_WHITE_BLOCK_POSE{1.65f, 0.90f, 0.5 * std::numbers::pi};
 constexpr Pose GARDEN_WATERING_POSE{1.65f, 1.20f, 0.0f};
-// ↓回転後の座標
+// ↓作業後の座標
 constexpr Pose WAREHOUSE_C_EXIT_POSE{WAREHOUSE_C_POSE.x, WAREHOUSE_C_POSE.y, 0.5f * std::numbers::pi};
-constexpr Pose GARDEN_BLACK_BLOCK_EXIT_POSE{GARDEN_BLACK_BLOCK_POSE.x, GARDEN_BLACK_BLOCK_POSE.y,
+constexpr Pose GARDEN_BLACK_BLOCK_BACK_POSE{GARDEN_BLACK_BLOCK_POSE.x - BLOCK_BACK_DISTANCE, GARDEN_BLACK_BLOCK_POSE.y,
+                                            GARDEN_BLACK_BLOCK_POSE.yaw};
+constexpr Pose GARDEN_BLACK_BLOCK_EXIT_POSE{GARDEN_BLACK_BLOCK_BACK_POSE.x, GARDEN_BLACK_BLOCK_BACK_POSE.y,
                                             -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_B_EXIT_POSE{WAREHOUSE_B_POSE.x, WAREHOUSE_B_POSE.y, 0.5f * std::numbers::pi};
-constexpr Pose GARDEN_WHITE_BLOCK_EXIT_POSE{GARDEN_WHITE_BLOCK_POSE.x, GARDEN_WHITE_BLOCK_POSE.y,
+constexpr Pose GARDEN_WHITE_BLOCK_BACK_POSE{GARDEN_WHITE_BLOCK_POSE.x - BLOCK_BACK_DISTANCE, GARDEN_WHITE_BLOCK_POSE.y,
+                                            GARDEN_WHITE_BLOCK_POSE.yaw};
+constexpr Pose GARDEN_WHITE_BLOCK_EXIT_POSE{GARDEN_WHITE_BLOCK_BACK_POSE.x, GARDEN_WHITE_BLOCK_BACK_POSE.y,
                                             -0.5f * std::numbers::pi};
 
 // コントロールモード一覧
@@ -146,13 +153,23 @@ enum class AutoControlMode {
   MANUAL,
   START_TO_C,
   GET_BLOCK_AND_WATERING_CAN,
+  WAIT_GET_BLOCK_AND_WATERING_CAN,
+  EXIT_WAREHOUSE_C,
   C_TO_GARDEN,
   PUT_BLACK_BLOCK,
+  WAIT_PUT_BLACK_BLOCK,
+  BACK_FROM_BLACK_BLOCK_GARDEN,
+  ROTATE_AFTER_BLACK_BLOCK,
   /// 自動機がBの白ブロックを２個回収するかも、ということで書いておいた　使わないかも
   GARDEN_TO_B,
   GET_WHITE_BLOCK,
+  WAIT_GET_WHITE_BLOCK,
+  EXIT_WAREHOUSE_B,
   B_TO_GARDEN,
   PUT_WHITE_BLOCK,
+  WAIT_PUT_WHITE_BLOCK,
+  BACK_FROM_WHITE_BLOCK_GARDEN,
+  ROTATE_AFTER_WHITE_BLOCK,
   ///
   WAIT_FOR_WATERING,
   GARDEN_TO_C_WARTERING,
@@ -169,8 +186,10 @@ void update_localization();
 Velocity calculate_velocity(const Pose &now_pose, const Pose &target_pose);
 void drive_wheels(const Velocity &cmd_vel);
 void stop_drive_wheels();
+void stop_drive_wheels_for_pause();
 void set_auto_control_mode(AutoControlMode mode);
 void move_to_pose(const Pose &target_pose, AutoControlMode next_mode);
+void wait_for_mecha(AutoControlMode next_mode);
 void move_servo(FeetechPositionControl &servo, float target_position);
 void collect_block_and_watering_can();
 extern "C" void app_main() {
@@ -208,8 +227,8 @@ extern "C" void app_main() {
 
     // printf("x: %f, y: %f, yaw: %f, block_pos: %f, watering_pos: %f\n\r", debug_pose_x.load(), debug_pose_y.load(),
     //        debug_pose_yaw.load(), block_holder_servo.get_position(), watering_can_servo.get_position());
-    printf("block_holder_pos %d\n\r", static_cast<int>(block_holder_servo.get_position()));
-    printf("yaw %f\n\r", debug_pose_yaw.load());
+    // printf("block_holder_pos %d\n\r", static_cast<int>(block_holder_servo.get_position()));
+    // printf("yaw %f\n\r", debug_pose_yaw.load());
     halx::core::delay(10);
   }
 }
@@ -226,7 +245,8 @@ void timer_callback(void *) {
 
   if (ps3.get_key_down(PS3Key::SELECT)) {
     competition_running = false;
-    set_auto_control_mode(AutoControlMode::EMERGENCY_STOP);
+    stop_drive_wheels_for_pause();
+    return;
   }
 
   switch (auto_control_mode) {
@@ -248,7 +268,7 @@ void timer_callback(void *) {
       set_auto_control_mode(AutoControlMode::START_TO_C);
       break;
     }
-    // メモ　デバッグするときは下のコメントアウトを外してset_auto_control_modeをコメントアウトする
+    // // メモ　デバッグするときは下のコメントアウトを外してset_auto_control_modeをコメントアウトする
     if (ps3.get_key_down(PS3Key::LEFT)) {
       block_holder_servo.set_position(BLOCK_HOLDER_OPEN_POSITION);
     }
@@ -261,16 +281,16 @@ void timer_callback(void *) {
     if (ps3.get_key_down(PS3Key::DOWN)) {
       watering_can_servo.set_position(WATERING_CAN_COLLECT_POSITION);
     }
-    if (ps3.get_key_down(PS3Key::R2)) {
+    if (ps3.get_key(PS3Key::R2)) {
       block_holder_servo.set_position(block_holder_servo.get_position() + 10);
     }
-    if (ps3.get_key_down(PS3Key::L2)) {
+    if (ps3.get_key(PS3Key::L2)) {
       block_holder_servo.set_position(block_holder_servo.get_position() - 10);
     }
 
     Velocity velocity;
-    velocity.x = 0.5f * ps3.get_axis(PS3Axis::LEFT_X);
-    velocity.y = 0.5f * ps3.get_axis(PS3Axis::LEFT_Y);
+    velocity.x = -0.5f * ps3.get_axis(PS3Axis::LEFT_X);
+    velocity.y = -0.5f * ps3.get_axis(PS3Axis::LEFT_Y);
     velocity.yaw = -(std::numbers::pi / 2.0f) * ps3.get_axis(PS3Axis::RIGHT_X); // 反時計回りに正となるように符号を反転
     drive_wheels(velocity);
     break;
@@ -283,7 +303,15 @@ void timer_callback(void *) {
 
   case AutoControlMode::GET_BLOCK_AND_WATERING_CAN:
     collect_block_and_watering_can();
-    // 場所が無かったからここにCに行く動作を書いた
+    waiting_ticks_mecha = 0;
+    set_auto_control_mode(AutoControlMode::WAIT_GET_BLOCK_AND_WATERING_CAN);
+    break;
+
+  case AutoControlMode::WAIT_GET_BLOCK_AND_WATERING_CAN:
+    wait_for_mecha(AutoControlMode::EXIT_WAREHOUSE_C);
+    break;
+
+  case AutoControlMode::EXIT_WAREHOUSE_C:
     move_to_pose(WAREHOUSE_C_EXIT_POSE, AutoControlMode::C_TO_GARDEN);
     break;
 
@@ -292,8 +320,20 @@ void timer_callback(void *) {
     break;
 
   case AutoControlMode::PUT_BLACK_BLOCK:
-
     move_servo(block_holder_servo, BLOCK_HOLDER_OPEN_POSITION);
+    waiting_ticks_mecha = 0;
+    set_auto_control_mode(AutoControlMode::WAIT_PUT_BLACK_BLOCK);
+    break;
+
+  case AutoControlMode::WAIT_PUT_BLACK_BLOCK:
+    wait_for_mecha(AutoControlMode::BACK_FROM_BLACK_BLOCK_GARDEN);
+    break;
+
+  case AutoControlMode::BACK_FROM_BLACK_BLOCK_GARDEN:
+    move_to_pose(GARDEN_BLACK_BLOCK_BACK_POSE, AutoControlMode::ROTATE_AFTER_BLACK_BLOCK);
+    break;
+
+  case AutoControlMode::ROTATE_AFTER_BLACK_BLOCK:
     move_to_pose(GARDEN_BLACK_BLOCK_EXIT_POSE, AutoControlMode::GARDEN_TO_B);
     break;
 
@@ -303,6 +343,15 @@ void timer_callback(void *) {
 
   case AutoControlMode::GET_WHITE_BLOCK:
     move_servo(block_holder_servo, BLOCK_HOLDER_CLOSED_POSITION);
+    waiting_ticks_mecha = 0;
+    set_auto_control_mode(AutoControlMode::WAIT_GET_WHITE_BLOCK);
+    break;
+
+  case AutoControlMode::WAIT_GET_WHITE_BLOCK:
+    wait_for_mecha(AutoControlMode::EXIT_WAREHOUSE_B);
+    break;
+
+  case AutoControlMode::EXIT_WAREHOUSE_B:
     move_to_pose(WAREHOUSE_B_EXIT_POSE, AutoControlMode::B_TO_GARDEN);
     break;
 
@@ -312,7 +361,19 @@ void timer_callback(void *) {
 
   case AutoControlMode::PUT_WHITE_BLOCK:
     move_servo(block_holder_servo, BLOCK_HOLDER_OPEN_POSITION);
+    waiting_ticks_mecha = 0;
+    set_auto_control_mode(AutoControlMode::WAIT_PUT_WHITE_BLOCK);
+    break;
 
+  case AutoControlMode::WAIT_PUT_WHITE_BLOCK:
+    wait_for_mecha(AutoControlMode::BACK_FROM_WHITE_BLOCK_GARDEN);
+    break;
+
+  case AutoControlMode::BACK_FROM_WHITE_BLOCK_GARDEN:
+    move_to_pose(GARDEN_WHITE_BLOCK_BACK_POSE, AutoControlMode::ROTATE_AFTER_WHITE_BLOCK);
+    break;
+
+  case AutoControlMode::ROTATE_AFTER_WHITE_BLOCK:
     move_to_pose(GARDEN_WHITE_BLOCK_EXIT_POSE, AutoControlMode::WAIT_FOR_WATERING);
     break;
 
@@ -351,6 +412,14 @@ void timer_callback(void *) {
 }
 
 void set_auto_control_mode(AutoControlMode mode) { auto_control_mode = mode; }
+
+void wait_for_mecha(AutoControlMode next_mode) {
+  stop_drive_wheels();
+  if (++waiting_ticks_mecha >= WAIT_TICKS_MECHA) {
+    waiting_ticks_mecha = 0;
+    set_auto_control_mode(next_mode);
+  }
+}
 
 void move_to_pose(const Pose &target_pose, AutoControlMode next_mode) {
   const float delta_x = target_pose.x - robot_pose.x;
@@ -462,4 +531,9 @@ void stop_drive_wheels() {
   motor1.set_output(0.0f);
   motor2.set_output(0.0f);
   motor3.set_output(0.0f);
+}
+
+void stop_drive_wheels_for_pause() {
+  stop_drive_wheels();
+  set_auto_control_mode(AutoControlMode::MANUAL);
 }
