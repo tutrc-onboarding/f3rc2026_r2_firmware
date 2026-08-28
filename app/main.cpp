@@ -131,7 +131,7 @@ constexpr float SEQUENCE_Y_POSITION_TOLERANCE = 0.05f; // [m] y軸方向の許�
 constexpr float SEQUENCE_YAW_TOLERANCE = 0.025f;       // [rad] 角度の許容誤差
 constexpr float WAREHOUSE_C_ENTRY_MAX_SPEED = 0.15f;   // [m/s] 待機点から回収点までの最大並進速度
 constexpr float BLOCK_BACK_DISTANCE = 0.35f;           // [m] ブロック配置後の後退距離
-constexpr uint32_t WAIT_TICKS_MECHA = 50;              // [1/100秒] 回収・設置後に～秒待つ
+constexpr uint32_t WAIT_TICKS_MECHA = 25;              // [1/100秒] 回収・設置後に～秒待つ
 constexpr uint32_t WATERING_START_TICKS = 500; // [1/100秒]倉庫Bから白ブロックを運んでから何秒待って水やりを開始するか
 uint32_t competition_ticks = 0;                // 競技時間を計測
 uint32_t waiting_ticks = 0;                    // どんくらい待ってるか
@@ -143,7 +143,7 @@ constexpr Pose R2_START_POSE{0.0f, 0.0f, -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_C_WAIT_POSE{-1.40f, 0.085f, -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_C_POSE{-1.60f, 0.085f, -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_B_POSE{-1.30f, 0.90f, -0.5f * std::numbers::pi};
-constexpr Pose WAREHOUSE_A_POSE{-1.60f, 1.725f, -0.5f * std::numbers::pi};
+constexpr Pose WAREHOUSE_A_POSE{-1.30f, 1.725f, -0.5f * std::numbers::pi};
 constexpr Pose GARDEN_BLACK_BLOCK_POSE{1.65f, 0.085f, 0.5f * std::numbers::pi};
 constexpr Pose GARDEN_WHITE_BLOCK_POSE{1.65f, 0.90f, 0.5f * std::numbers::pi};
 constexpr Pose GARDEN_WATERING_POSE{1.65f, 1.20f, -0.5f * std::numbers::pi};
@@ -158,7 +158,11 @@ constexpr Pose GARDEN_WHITE_BLOCK_BACK_POSE{GARDEN_WHITE_BLOCK_POSE.x - BLOCK_BA
                                             GARDEN_WHITE_BLOCK_POSE.yaw};
 constexpr Pose GARDEN_WHITE_BLOCK_EXIT_POSE{GARDEN_WHITE_BLOCK_BACK_POSE.x, GARDEN_WHITE_BLOCK_BACK_POSE.y,
                                             -0.5f * std::numbers::pi};
-
+constexpr Pose WATERING_WAREHOUSE_A{-1.3, 0.085f, -0.5f * std::numbers::pi};
+constexpr Pose WATERING_WAREHOUSE_A_RELAY{-1.0, 0.085, -0.5f * std::numbers::pi};
+constexpr Pose WATERING_GARDEN{1.5f, 0.905f, -0.5f * std::numbers::pi};
+constexpr Pose WATERING_WAREHOUSE_C{-1.3, 1.725f, -0.5f * std::numbers::pi};
+constexpr Pose WATERING_WAREHOUSE_C_RELAY{-1.0, 1.725f, -0.5f * std::numbers::pi};
 // コントロールモード一覧
 enum class AutoControlMode {
   EMERGENCY_STOP,
@@ -185,10 +189,15 @@ enum class AutoControlMode {
   ROTATE_AFTER_WHITE_BLOCK,
   ///
   WAIT_FOR_WATERING,
-  GARDEN_TO_C_WARTERING,
-  C_TO_GARDEN_WARTERING,
-  GARDEN_TO_A_WARTERING,
-  A_TO_GARDEN_WARTERING,
+  WATERING_TO_A_RELAY,
+  WATERING_A_RELAY_TO_A,
+  WATERING_A_TO_A_RELAY,
+  WATERING_A_RELAY_TO_GARDEN,
+  WATERING_GARDEN_TO_C_RELAY,
+  WATERING_C_RELAY_TO_C,
+  WATERING_C_TO_C_RELAY,
+  WATERING_C_RELAY_TO_GARDEN,
+
 };
 
 Pose robot_pose = R2_START_POSE;
@@ -400,24 +409,40 @@ void timer_callback(void *) {
     // 邪魔だったら待機場所を設定してもいいかも
     stop_drive_wheels();
     if (waiting_ticks >= WATERING_START_TICKS) {
-      set_auto_control_mode(AutoControlMode::GARDEN_TO_C_WARTERING);
+      set_auto_control_mode(AutoControlMode::WATERING_TO_A_RELAY);
     }
     break;
 
-  case AutoControlMode::GARDEN_TO_C_WARTERING:
-    move_to_pose(WAREHOUSE_C_POSE, AutoControlMode::C_TO_GARDEN_WARTERING);
+  case AutoControlMode::WATERING_TO_A_RELAY:
+    move_to_pose(WATERING_WAREHOUSE_A_RELAY, AutoControlMode::WATERING_A_RELAY_TO_A);
     break;
 
-  case AutoControlMode::C_TO_GARDEN_WARTERING:
-    move_to_pose(GARDEN_WATERING_POSE, AutoControlMode::GARDEN_TO_A_WARTERING);
+  case AutoControlMode::WATERING_A_RELAY_TO_A:
+    move_to_pose(WATERING_WAREHOUSE_A, AutoControlMode::WATERING_A_TO_A_RELAY);
     break;
 
-  case AutoControlMode::GARDEN_TO_A_WARTERING:
-    move_to_pose(WAREHOUSE_A_POSE, AutoControlMode::A_TO_GARDEN_WARTERING);
+  case AutoControlMode::WATERING_A_TO_A_RELAY:
+    move_to_pose(WATERING_WAREHOUSE_A_RELAY, AutoControlMode::WATERING_A_RELAY_TO_GARDEN);
     break;
 
-  case AutoControlMode::A_TO_GARDEN_WARTERING:
-    move_to_pose(GARDEN_WATERING_POSE, AutoControlMode::GARDEN_TO_C_WARTERING);
+  case AutoControlMode::WATERING_A_RELAY_TO_GARDEN:
+    move_to_pose(WATERING_GARDEN, AutoControlMode::WATERING_GARDEN_TO_C_RELAY);
+    break;
+
+  case AutoControlMode::WATERING_GARDEN_TO_C_RELAY:
+    move_to_pose(WATERING_WAREHOUSE_C_RELAY, AutoControlMode::WATERING_C_RELAY_TO_C);
+    break;
+
+  case AutoControlMode::WATERING_C_RELAY_TO_C:
+    move_to_pose(WATERING_WAREHOUSE_C, AutoControlMode::WATERING_C_TO_C_RELAY);
+    break;
+
+  case AutoControlMode::WATERING_C_TO_C_RELAY:
+    move_to_pose(WATERING_WAREHOUSE_C_RELAY, AutoControlMode::WATERING_C_RELAY_TO_GARDEN);
+    break;
+
+  case AutoControlMode::WATERING_C_RELAY_TO_GARDEN:
+    move_to_pose(WATERING_GARDEN, AutoControlMode::WATERING_TO_A_RELAY);
     break;
   }
 
