@@ -142,11 +142,11 @@ bool competition_running = false; // 計測のトリガー的な
 constexpr Pose R2_START_POSE{0.0f, 0.0f, -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_C_WAIT_POSE{-1.40f, 0.085f, -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_C_POSE{-1.60f, 0.085f, -0.5f * std::numbers::pi};
-constexpr Pose WAREHOUSE_B_POSE{-1.60f, 0.90f, -0.5f * std::numbers::pi};
-constexpr Pose WAREHOUSE_A_POSE{-1.60f, 1.725f, 0.0f};
-constexpr Pose GARDEN_BLACK_BLOCK_POSE{1.65f, 0.30f, 0.5f * std::numbers::pi};
-constexpr Pose GARDEN_WHITE_BLOCK_POSE{1.65f, 0.90f, 0.5 * std::numbers::pi};
-constexpr Pose GARDEN_WATERING_POSE{1.65f, 1.20f, 0.0f};
+constexpr Pose WAREHOUSE_B_POSE{-1.30f, 0.90f, -0.5f * std::numbers::pi};
+constexpr Pose WAREHOUSE_A_POSE{-1.60f, 1.725f, -0.5f * std::numbers::pi};
+constexpr Pose GARDEN_BLACK_BLOCK_POSE{1.65f, 0.085f, 0.5f * std::numbers::pi};
+constexpr Pose GARDEN_WHITE_BLOCK_POSE{1.65f, 0.90f, 0.5f * std::numbers::pi};
+constexpr Pose GARDEN_WATERING_POSE{1.65f, 1.20f, -0.5f * std::numbers::pi};
 // ↓作業後の座標
 constexpr Pose WAREHOUSE_C_EXIT_POSE{WAREHOUSE_C_POSE.x, WAREHOUSE_C_POSE.y, 0.5f * std::numbers::pi};
 constexpr Pose GARDEN_BLACK_BLOCK_BACK_POSE{GARDEN_BLACK_BLOCK_POSE.x - BLOCK_BACK_DISTANCE, GARDEN_BLACK_BLOCK_POSE.y,
