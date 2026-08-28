@@ -140,8 +140,8 @@ bool competition_running = false; // 計測のトリガー的な
 
 // R2スタートゾーンの中心を原点、右を+x、上を+y
 constexpr Pose R2_START_POSE{0.0f, 0.0f, -0.5f * std::numbers::pi};
-constexpr Pose WAREHOUSE_C_WAIT_POSE{-1.40f, 0.075f, -0.5f * std::numbers::pi};
-constexpr Pose WAREHOUSE_C_POSE{-1.60f, 0.075f, -0.5f * std::numbers::pi};
+constexpr Pose WAREHOUSE_C_WAIT_POSE{-1.40f, 0.085f, -0.5f * std::numbers::pi};
+constexpr Pose WAREHOUSE_C_POSE{-1.60f, 0.085f, -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_B_POSE{-1.60f, 0.90f, -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_A_POSE{-1.60f, 1.725f, 0.0f};
 constexpr Pose GARDEN_BLACK_BLOCK_POSE{1.65f, 0.30f, 0.5f * std::numbers::pi};
@@ -444,8 +444,7 @@ void move_to_pose(const Pose &target_pose, AutoControlMode next_mode, float max_
   const float delta_y = target_pose.y - robot_pose.y;
   const float delta_yaw = std::remainder(target_pose.yaw - robot_pose.yaw, 2.0f * std::numbers::pi);
 
-  if (std::abs(delta_x) <= SEQUENCE_X_POSITION_TOLERANCE &&
-      std::abs(delta_y) <= SEQUENCE_Y_POSITION_TOLERANCE &&
+  if (std::abs(delta_x) <= SEQUENCE_X_POSITION_TOLERANCE && std::abs(delta_y) <= SEQUENCE_Y_POSITION_TOLERANCE &&
       std::abs(delta_yaw) <= SEQUENCE_YAW_TOLERANCE) {
     stop_drive_wheels();
     set_auto_control_mode(next_mode);
