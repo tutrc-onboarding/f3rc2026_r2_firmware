@@ -96,13 +96,13 @@ PIDController motor3_pid(DRIVE_WHEEL_PID_PARAMS, CONTROL_DT);
 PS3 ps3(uart4);
 BNO055<&hi2c3> imu;
 
-constexpr int BLOCK_HOLDER_OPEN_POSITION = 521;
-constexpr int BLOCK_HOLDER_CLOSED_POSITION = 2028;
-constexpr int WATERING_CAN_RELEASE_POSITION = 2500;
-constexpr int WATERING_CAN_COLLECT_POSITION = 1015;
+constexpr int BLOCK_HOLDER_OPEN_POSITION = 2414;
+constexpr int BLOCK_HOLDER_CLOSED_POSITION = 3787;
+constexpr int WATERING_CAN_PULL_POSITION = 1532;
+constexpr int WATERING_CAN_COLLECT_POSITION = 895;
 
-FeetechPositionControl block_holder_servo(uart5, 1, 521);  // 521-3353   2028でブロックを回収する
-FeetechPositionControl watering_can_servo(uart5, 2, 2500); // 1015-2500
+FeetechPositionControl block_holder_servo(uart5, 1, 3146); // 2414-3146
+FeetechPositionControl watering_can_servo(uart5, 2, 895);  // 597-3051 (get:895, pull:1532)
 
 std::atomic<float> imu_yaw = 0.0f;
 
@@ -215,6 +215,7 @@ void move_to_pose(const Pose &target_pose, AutoControlMode next_mode, float max_
 void wait_for_mecha(AutoControlMode next_mode);
 void move_servo(FeetechPositionControl &servo, float target_position);
 void collect_block_and_watering_can();
+void move_to_pose_watering(const Pose &target_pose, AutoControlMode next_mode, float max_translation_speed = 0.0f);
 extern "C" void app_main() {
   halx::driver::enable_stdout(lpuart1);
 
@@ -299,7 +300,7 @@ void timer_callback(void *) {
       block_holder_servo.set_position(BLOCK_HOLDER_CLOSED_POSITION);
     }
     if (ps3.get_key_down(PS3Key::UP)) {
-      watering_can_servo.set_position(WATERING_CAN_RELEASE_POSITION);
+      watering_can_servo.set_position(WATERING_CAN_PULL_POSITION);
     }
     if (ps3.get_key_down(PS3Key::DOWN)) {
       watering_can_servo.set_position(WATERING_CAN_COLLECT_POSITION);
@@ -414,35 +415,35 @@ void timer_callback(void *) {
     break;
 
   case AutoControlMode::WATERING_TO_A_RELAY:
-    move_to_pose(WATERING_WAREHOUSE_A_RELAY, AutoControlMode::WATERING_A_RELAY_TO_A);
+    move_to_pose_watering(WATERING_WAREHOUSE_A_RELAY, AutoControlMode::WATERING_A_RELAY_TO_A);
     break;
 
   case AutoControlMode::WATERING_A_RELAY_TO_A:
-    move_to_pose(WATERING_WAREHOUSE_A, AutoControlMode::WATERING_A_TO_A_RELAY);
+    move_to_pose_watering(WATERING_WAREHOUSE_A, AutoControlMode::WATERING_A_TO_A_RELAY);
     break;
 
   case AutoControlMode::WATERING_A_TO_A_RELAY:
-    move_to_pose(WATERING_WAREHOUSE_A_RELAY, AutoControlMode::WATERING_A_RELAY_TO_GARDEN);
+    move_to_pose_watering(WATERING_WAREHOUSE_A_RELAY, AutoControlMode::WATERING_A_RELAY_TO_GARDEN);
     break;
 
   case AutoControlMode::WATERING_A_RELAY_TO_GARDEN:
-    move_to_pose(WATERING_GARDEN, AutoControlMode::WATERING_GARDEN_TO_C_RELAY);
+    move_to_pose_watering(WATERING_GARDEN, AutoControlMode::WATERING_GARDEN_TO_C_RELAY);
     break;
 
   case AutoControlMode::WATERING_GARDEN_TO_C_RELAY:
-    move_to_pose(WATERING_WAREHOUSE_C_RELAY, AutoControlMode::WATERING_C_RELAY_TO_C);
+    move_to_pose_watering(WATERING_WAREHOUSE_C_RELAY, AutoControlMode::WATERING_C_RELAY_TO_C);
     break;
 
   case AutoControlMode::WATERING_C_RELAY_TO_C:
-    move_to_pose(WATERING_WAREHOUSE_C, AutoControlMode::WATERING_C_TO_C_RELAY);
+    move_to_pose_watering(WATERING_WAREHOUSE_C, AutoControlMode::WATERING_C_TO_C_RELAY);
     break;
 
   case AutoControlMode::WATERING_C_TO_C_RELAY:
-    move_to_pose(WATERING_WAREHOUSE_C_RELAY, AutoControlMode::WATERING_C_RELAY_TO_GARDEN);
+    move_to_pose_watering(WATERING_WAREHOUSE_C_RELAY, AutoControlMode::WATERING_C_RELAY_TO_GARDEN);
     break;
 
   case AutoControlMode::WATERING_C_RELAY_TO_GARDEN:
-    move_to_pose(WATERING_GARDEN, AutoControlMode::WATERING_TO_A_RELAY);
+    move_to_pose_watering(WATERING_GARDEN, AutoControlMode::WATERING_TO_A_RELAY);
     break;
   }
 
@@ -490,7 +491,31 @@ void move_to_pose(const Pose &target_pose, AutoControlMode next_mode, float max_
 
   drive_wheels(target_velocity);
 }
+void move_to_pose_watering(const Pose &target_pose, AutoControlMode next_mode, float max_translation_speed) {
+  const float delta_x = target_pose.x - robot_pose.x;
+  const float delta_y = target_pose.y - robot_pose.y;
+  const float delta_yaw = std::remainder(target_pose.yaw - robot_pose.yaw, 2.0f * std::numbers::pi);
 
+  if (std::abs(delta_x) <= SEQUENCE_X_POSITION_TOLERANCE && std::abs(delta_y) <= SEQUENCE_Y_POSITION_TOLERANCE &&
+      std::abs(delta_yaw) <= SEQUENCE_YAW_TOLERANCE) {
+    set_auto_control_mode(next_mode);
+    return;
+  }
+
+  Velocity target_velocity = calculate_velocity(robot_pose, target_pose);
+  if (max_translation_speed > 0.0f) {
+    const float translation_speed_squared =
+        target_velocity.x * target_velocity.x + target_velocity.y * target_velocity.y;
+    const float max_translation_speed_squared = max_translation_speed * max_translation_speed;
+    if (translation_speed_squared > max_translation_speed_squared) {
+      const float speed_ratio = max_translation_speed / std::sqrt(translation_speed_squared);
+      target_velocity.x *= speed_ratio;
+      target_velocity.y *= speed_ratio;
+    }
+  }
+
+  drive_wheels(target_velocity);
+}
 void move_servo(FeetechPositionControl &servo, float target_position) {
   stop_drive_wheels();
   servo.set_position(target_position);
