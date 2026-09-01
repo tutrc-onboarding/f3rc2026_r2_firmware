@@ -145,8 +145,6 @@ constexpr Pose R2_START_POSE{0.0f, 0.0f, -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_C_POSE{-1.40f, 0.25f, -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_C_WAIT_POSE{WAREHOUSE_C_POSE.x + WAREHOUSE_WAIT_OFFSET_X, WAREHOUSE_C_POSE.y,
                                      WAREHOUSE_C_POSE.yaw};
-// constexpr Pose WAREHOUSE_C_JOURO_POSE{WAREHOUSE_C_POSE.x, 0.15f, WAREHOUSE_C_POSE.yaw};
-constexpr Pose WAREHOUSE_C_JOURO_POSE{WAREHOUSE_C_POSE.x, 0.15f, WAREHOUSE_C_POSE.yaw};
 constexpr Pose WAREHOUSE_B_POSE{-1.30f, 0.90f, -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_B_WAIT_POSE{WAREHOUSE_B_POSE.x + WAREHOUSE_WAIT_OFFSET_X, WAREHOUSE_B_POSE.y,
                                      WAREHOUSE_B_POSE.yaw};
@@ -176,11 +174,8 @@ enum class AutoControlMode {
   MANUAL,
   START_TO_C,
   ENTER_WAREHOUSE_C,
-  GET_BLOCK_AND_WATERING_CAN,
-  WAIT_GET_BLOCK_AND_WATERING_CAN,
-  MOVE_TO_C_JOURO,
-  GET_C_JOURO,
-  WAIT_GET_C_JOURO,
+  GET_BLACK_BLOCK,
+  WAIT_GET_BLACK_BLOCK,
   EXIT_WAREHOUSE_C,
   C_TO_GARDEN,
   PUT_BLACK_BLOCK,
@@ -343,33 +338,18 @@ void timer_callback(void *) {
 
   case AutoControlMode::ENTER_WAREHOUSE_C:
     block_holder_servo.set_position(BLOCK_HOLDER_OPEN_POSITION);
-    watering_can_servo.set_position(WATERING_CAN_COLLECT_POSITION);
-    move_to_pose(WAREHOUSE_C_POSE, AutoControlMode::GET_BLOCK_AND_WATERING_CAN, WAREHOUSE_ENTRY_MAX_SPEED,
+    watering_can_servo.set_position(WATERING_CAN_PULL_POSITION);
+    move_to_pose(WAREHOUSE_C_POSE, AutoControlMode::GET_BLACK_BLOCK, WAREHOUSE_ENTRY_MAX_SPEED,
                  WAREHOUSE_ENTRY_POSITION_TOLERANCE, WAREHOUSE_ENTRY_POSITION_TOLERANCE);
     break;
 
-  case AutoControlMode::GET_BLOCK_AND_WATERING_CAN:
+  case AutoControlMode::GET_BLACK_BLOCK:
     collect_block();
     waiting_ticks_mecha = 0;
-    set_auto_control_mode(AutoControlMode::WAIT_GET_BLOCK_AND_WATERING_CAN);
+    set_auto_control_mode(AutoControlMode::WAIT_GET_BLACK_BLOCK);
     break;
 
-  case AutoControlMode::WAIT_GET_BLOCK_AND_WATERING_CAN:
-    wait_for_mecha(AutoControlMode::MOVE_TO_C_JOURO);
-    break;
-
-  case AutoControlMode::MOVE_TO_C_JOURO:
-    move_to_pose(WAREHOUSE_C_JOURO_POSE, AutoControlMode::GET_C_JOURO, WAREHOUSE_ENTRY_MAX_SPEED,
-                 WAREHOUSE_ENTRY_POSITION_TOLERANCE, WAREHOUSE_ENTRY_POSITION_TOLERANCE);
-    break;
-
-  case AutoControlMode::GET_C_JOURO:
-    move_servo(watering_can_servo, WATERING_CAN_PULL_POSITION);
-    waiting_ticks_mecha = 0;
-    set_auto_control_mode(AutoControlMode::WAIT_GET_C_JOURO);
-    break;
-
-  case AutoControlMode::WAIT_GET_C_JOURO:
+  case AutoControlMode::WAIT_GET_BLACK_BLOCK:
     wait_for_mecha(AutoControlMode::EXIT_WAREHOUSE_C);
     break;
 
