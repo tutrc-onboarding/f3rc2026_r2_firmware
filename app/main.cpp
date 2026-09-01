@@ -149,11 +149,13 @@ constexpr Pose WAREHOUSE_B_POSE{-1.30f, 0.90f, -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_B_WAIT_POSE{WAREHOUSE_B_POSE.x + WAREHOUSE_WAIT_OFFSET_X, WAREHOUSE_B_POSE.y,
                                      WAREHOUSE_B_POSE.yaw};
 constexpr Pose WAREHOUSE_A_POSE{-1.30f, 1.725f, -0.5f * std::numbers::pi};
-constexpr Pose GARDEN_BLACK_BLOCK_POSE{1.65f, 0.085f, 0.5f * std::numbers::pi};
+constexpr Pose GARDEN_BLACK_BLOCK_POSE{1.65f, 1.725f, 0.5f * std::numbers::pi};
 constexpr Pose GARDEN_WHITE_BLOCK_POSE{1.65f, 0.90f, 0.5f * std::numbers::pi};
 constexpr Pose GARDEN_WATERING_POSE{1.65f, 1.20f, -0.5f * std::numbers::pi};
 // ↓作業後の座標
-constexpr Pose WAREHOUSE_C_EXIT_POSE{WAREHOUSE_C_POSE.x, WAREHOUSE_C_POSE.y, 0.5f * std::numbers::pi};
+constexpr Pose WAREHOUSE_C_EXIT_POSE{0.9f, WAREHOUSE_C_POSE.y, WAREHOUSE_C_POSE.yaw};
+constexpr Pose WAREHOUSE_C_EXIT_ROTATED_POSE{WAREHOUSE_C_EXIT_POSE.x, WAREHOUSE_C_EXIT_POSE.y,
+                                             0.5f * std::numbers::pi};
 constexpr Pose GARDEN_BLACK_BLOCK_BACK_POSE{GARDEN_BLACK_BLOCK_POSE.x - BLOCK_BACK_DISTANCE, GARDEN_BLACK_BLOCK_POSE.y,
                                             GARDEN_BLACK_BLOCK_POSE.yaw};
 constexpr Pose GARDEN_BLACK_BLOCK_EXIT_POSE{GARDEN_BLACK_BLOCK_BACK_POSE.x, GARDEN_BLACK_BLOCK_BACK_POSE.y,
@@ -177,6 +179,7 @@ enum class AutoControlMode {
   GET_BLACK_BLOCK,
   WAIT_GET_BLACK_BLOCK,
   EXIT_WAREHOUSE_C,
+  ROTATE_AFTER_EXIT_WAREHOUSE_C,
   C_TO_GARDEN,
   PUT_BLACK_BLOCK,
   WAIT_PUT_BLACK_BLOCK,
@@ -338,7 +341,7 @@ void timer_callback(void *) {
 
   case AutoControlMode::ENTER_WAREHOUSE_C:
     block_holder_servo.set_position(BLOCK_HOLDER_OPEN_POSITION);
-    watering_can_servo.set_position(WATERING_CAN_PULL_POSITION);
+    watering_can_servo.set_position(WATERING_CAN_COLLECT_POSITION);
     move_to_pose(WAREHOUSE_C_POSE, AutoControlMode::GET_BLACK_BLOCK, WAREHOUSE_ENTRY_MAX_SPEED,
                  WAREHOUSE_ENTRY_POSITION_TOLERANCE, WAREHOUSE_ENTRY_POSITION_TOLERANCE);
     break;
@@ -354,8 +357,12 @@ void timer_callback(void *) {
     break;
 
   case AutoControlMode::EXIT_WAREHOUSE_C:
-    move_to_pose(WAREHOUSE_C_EXIT_POSE, AutoControlMode::C_TO_GARDEN, 0.0f, WAREHOUSE_ENTRY_POSITION_TOLERANCE,
-                 WAREHOUSE_ENTRY_POSITION_TOLERANCE);
+    move_to_pose(WAREHOUSE_C_EXIT_POSE, AutoControlMode::ROTATE_AFTER_EXIT_WAREHOUSE_C, 0.0f,
+                 WAREHOUSE_ENTRY_POSITION_TOLERANCE, WAREHOUSE_ENTRY_POSITION_TOLERANCE);
+    break;
+
+  case AutoControlMode::ROTATE_AFTER_EXIT_WAREHOUSE_C:
+    move_to_pose(WAREHOUSE_C_EXIT_ROTATED_POSE, AutoControlMode::C_TO_GARDEN);
     break;
 
   case AutoControlMode::C_TO_GARDEN:
