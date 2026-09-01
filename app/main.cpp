@@ -126,13 +126,14 @@ struct Pose {
   float yaw; // [rad]
 };
 
-constexpr float SEQUENCE_X_POSITION_TOLERANCE = 0.01f;  // [m] x軸方向の許容誤差
-constexpr float SEQUENCE_Y_POSITION_TOLERANCE = 0.05f;  // [m] y軸方向の許容誤差
-constexpr float SEQUENCE_YAW_TOLERANCE = 0.025f;        // [rad] 角度の許容誤差
-constexpr float WAREHOUSE_C_POSITION_TOLERANCE = 0.01f; // [m] 倉庫Cの座標調整を確実に反映するための許容誤差
-constexpr float WAREHOUSE_C_ENTRY_MAX_SPEED = 0.15f;    // [m/s] 待機点から回収点までの最大並進速度
-constexpr float BLOCK_BACK_DISTANCE = 0.35f;            // [m] ブロック配置後の後退距離
-constexpr uint32_t WAIT_TICKS_MECHA = 25;               // [1/100秒] 回収・設置後に～秒待つ
+constexpr float SEQUENCE_X_POSITION_TOLERANCE = 0.01f;      // [m] x軸方向の許容誤差
+constexpr float SEQUENCE_Y_POSITION_TOLERANCE = 0.05f;      // [m] y軸方向の許容誤差
+constexpr float SEQUENCE_YAW_TOLERANCE = 0.025f;            // [rad] 角度の許容誤差
+constexpr float WAREHOUSE_ENTRY_POSITION_TOLERANCE = 0.01f; // [m] 倉庫進入時の座標調整を確実に反映するための許容誤差
+constexpr float WAREHOUSE_ENTRY_MAX_SPEED = 0.15f;          // [m/s] 待機点から回収点までの最大並進速度
+constexpr float WAREHOUSE_WAIT_OFFSET_X = 0.20f;            // [m] 回収点から待機点までのx方向オフセット
+constexpr float BLOCK_BACK_DISTANCE = 0.35f;                // [m] ブロック配置後の後退距離
+constexpr uint32_t WAIT_TICKS_MECHA = 25;                   // [1/100秒] 回収・設置後に～秒待つ
 constexpr uint32_t WATERING_START_TICKS = 500; // [1/100秒]倉庫Bから白ブロックを運んでから何秒待って水やりを開始するか
 uint32_t competition_ticks = 0;                // 競技時間を計測
 uint32_t waiting_ticks = 0;                    // どんくらい待ってるか
@@ -142,12 +143,13 @@ bool competition_running = false; // 計測のトリガー的な
 // R2スタートゾーンの中心を原点、右を+x、上を+y
 constexpr Pose R2_START_POSE{0.0f, 0.0f, -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_C_POSE{-1.40f, 0.25f, -0.5f * std::numbers::pi};
-constexpr float WAREHOUSE_C_WAIT_OFFSET_X = 0.20f;
-constexpr Pose WAREHOUSE_C_WAIT_POSE{WAREHOUSE_C_POSE.x + WAREHOUSE_C_WAIT_OFFSET_X, WAREHOUSE_C_POSE.y,
+constexpr Pose WAREHOUSE_C_WAIT_POSE{WAREHOUSE_C_POSE.x + WAREHOUSE_WAIT_OFFSET_X, WAREHOUSE_C_POSE.y,
                                      WAREHOUSE_C_POSE.yaw};
 // constexpr Pose WAREHOUSE_C_JOURO_POSE{WAREHOUSE_C_POSE.x, 0.15f, WAREHOUSE_C_POSE.yaw};
-constexpr Pose WAREHOUSE_C_JOURO_POSE{WAREHOUSE_C_POSE.x, 0.25f, WAREHOUSE_C_POSE.yaw};
+constexpr Pose WAREHOUSE_C_JOURO_POSE{WAREHOUSE_C_POSE.x, 0.15f, WAREHOUSE_C_POSE.yaw};
 constexpr Pose WAREHOUSE_B_POSE{-1.30f, 0.90f, -0.5f * std::numbers::pi};
+constexpr Pose WAREHOUSE_B_WAIT_POSE{WAREHOUSE_B_POSE.x + WAREHOUSE_WAIT_OFFSET_X, WAREHOUSE_B_POSE.y,
+                                     WAREHOUSE_B_POSE.yaw};
 constexpr Pose WAREHOUSE_A_POSE{-1.30f, 1.725f, -0.5f * std::numbers::pi};
 constexpr Pose GARDEN_BLACK_BLOCK_POSE{1.65f, 0.085f, 0.5f * std::numbers::pi};
 constexpr Pose GARDEN_WHITE_BLOCK_POSE{1.65f, 0.90f, 0.5f * std::numbers::pi};
@@ -187,6 +189,7 @@ enum class AutoControlMode {
   ROTATE_AFTER_BLACK_BLOCK,
   /// 自動機がBの白ブロックを２個回収するかも、ということで書いておいた　使わないかも
   GARDEN_TO_B,
+  ENTER_WAREHOUSE_B,
   GET_WHITE_BLOCK,
   WAIT_GET_WHITE_BLOCK,
   EXIT_WAREHOUSE_B,
@@ -333,16 +336,16 @@ void timer_callback(void *) {
   // move_to_pose(行く場所, 次の動作)
   // move_servo(動かすサーボ, set_position)
   case AutoControlMode::START_TO_C:
-    move_to_pose(WAREHOUSE_C_WAIT_POSE, AutoControlMode::ENTER_WAREHOUSE_C, 0.0f, WAREHOUSE_C_POSITION_TOLERANCE,
-                 WAREHOUSE_C_POSITION_TOLERANCE);
+    move_to_pose(WAREHOUSE_C_WAIT_POSE, AutoControlMode::ENTER_WAREHOUSE_C, 0.0f, WAREHOUSE_ENTRY_POSITION_TOLERANCE,
+                 WAREHOUSE_ENTRY_POSITION_TOLERANCE);
 
     break;
 
   case AutoControlMode::ENTER_WAREHOUSE_C:
     block_holder_servo.set_position(BLOCK_HOLDER_OPEN_POSITION);
     watering_can_servo.set_position(WATERING_CAN_COLLECT_POSITION);
-    move_to_pose(WAREHOUSE_C_POSE, AutoControlMode::GET_BLOCK_AND_WATERING_CAN, WAREHOUSE_C_ENTRY_MAX_SPEED,
-                 WAREHOUSE_C_POSITION_TOLERANCE, WAREHOUSE_C_POSITION_TOLERANCE);
+    move_to_pose(WAREHOUSE_C_POSE, AutoControlMode::GET_BLOCK_AND_WATERING_CAN, WAREHOUSE_ENTRY_MAX_SPEED,
+                 WAREHOUSE_ENTRY_POSITION_TOLERANCE, WAREHOUSE_ENTRY_POSITION_TOLERANCE);
     break;
 
   case AutoControlMode::GET_BLOCK_AND_WATERING_CAN:
@@ -356,8 +359,8 @@ void timer_callback(void *) {
     break;
 
   case AutoControlMode::MOVE_TO_C_JOURO:
-    move_to_pose(WAREHOUSE_C_JOURO_POSE, AutoControlMode::GET_C_JOURO, WAREHOUSE_C_ENTRY_MAX_SPEED,
-                 WAREHOUSE_C_POSITION_TOLERANCE, WAREHOUSE_C_POSITION_TOLERANCE);
+    move_to_pose(WAREHOUSE_C_JOURO_POSE, AutoControlMode::GET_C_JOURO, WAREHOUSE_ENTRY_MAX_SPEED,
+                 WAREHOUSE_ENTRY_POSITION_TOLERANCE, WAREHOUSE_ENTRY_POSITION_TOLERANCE);
     break;
 
   case AutoControlMode::GET_C_JOURO:
@@ -371,8 +374,8 @@ void timer_callback(void *) {
     break;
 
   case AutoControlMode::EXIT_WAREHOUSE_C:
-    move_to_pose(WAREHOUSE_C_EXIT_POSE, AutoControlMode::C_TO_GARDEN, 0.0f, WAREHOUSE_C_POSITION_TOLERANCE,
-                 WAREHOUSE_C_POSITION_TOLERANCE);
+    move_to_pose(WAREHOUSE_C_EXIT_POSE, AutoControlMode::C_TO_GARDEN, 0.0f, WAREHOUSE_ENTRY_POSITION_TOLERANCE,
+                 WAREHOUSE_ENTRY_POSITION_TOLERANCE);
     break;
 
   case AutoControlMode::C_TO_GARDEN:
@@ -398,7 +401,14 @@ void timer_callback(void *) {
     break;
 
   case AutoControlMode::GARDEN_TO_B:
-    move_to_pose(WAREHOUSE_B_POSE, AutoControlMode::GET_WHITE_BLOCK);
+    move_to_pose(WAREHOUSE_B_WAIT_POSE, AutoControlMode::ENTER_WAREHOUSE_B, 0.0f, WAREHOUSE_ENTRY_POSITION_TOLERANCE,
+                 WAREHOUSE_ENTRY_POSITION_TOLERANCE);
+    break;
+
+  case AutoControlMode::ENTER_WAREHOUSE_B:
+    block_holder_servo.set_position(BLOCK_HOLDER_OPEN_POSITION);
+    move_to_pose(WAREHOUSE_B_POSE, AutoControlMode::GET_WHITE_BLOCK, WAREHOUSE_ENTRY_MAX_SPEED,
+                 WAREHOUSE_ENTRY_POSITION_TOLERANCE, WAREHOUSE_ENTRY_POSITION_TOLERANCE);
     break;
 
   case AutoControlMode::GET_WHITE_BLOCK:
