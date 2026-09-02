@@ -164,8 +164,8 @@ constexpr Pose WAREHOUSE_B_WAIT_POSE{WAREHOUSE_B_POSE.x + WAREHOUSE_WAIT_OFFSET_
                                      WAREHOUSE_B_POSE.yaw};
 constexpr Pose WAREHOUSE_A_POSE{-1.30f, 1.725f, -0.5f * std::numbers::pi};
 constexpr Pose GARDEN_BLACK_BLOCK_POSE{1.65f, 1.725f, 0.5f * std::numbers::pi};
-constexpr Pose GARDEN_WHITE_BLOCK_POSE{1.65f, 0.90f, 0.5f * std::numbers::pi};
-constexpr Pose GARDEN_WATERING_POSE{1.65f, 1.20f, -0.5f * std::numbers::pi};
+constexpr Pose GARDEN_WHITE_BLOCK_POSE{1.65f, 0.85f, 0.5f * std::numbers::pi};
+constexpr Pose GARDEN_WATERING_POSE{1.65f, 0.25f, -0.5f * std::numbers::pi};
 // ↓作業後の座標
 constexpr Pose WAREHOUSE_C_EXIT_POSE{-0.4f, 0.25f, WAREHOUSE_C_POSE.yaw};
 constexpr Pose WAREHOUSE_C_EXIT_ROTATED_POSE{WAREHOUSE_C_EXIT_POSE.x, WAREHOUSE_C_EXIT_POSE.y, WAREHOUSE_C_POSE.yaw};
