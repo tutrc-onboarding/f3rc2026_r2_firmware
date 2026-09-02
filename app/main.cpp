@@ -152,6 +152,7 @@ uint32_t competition_ticks = 0;                // 競技時間を計測
 uint32_t waiting_ticks = 0;                    // どんくらい待ってるか
 uint32_t waiting_ticks_mecha = 0;
 bool competition_running = false; // 計測のトリガー的な
+bool skip_warehouse_b_after_black_block = false;
 
 // R2スタートゾーンの中心を原点、右を+x、上を+y
 constexpr Pose R2_START_POSE{0.0f, 0.0f, -0.5f * std::numbers::pi};
@@ -340,10 +341,19 @@ void timer_callback(void *) {
       robot_pose = R2_START_POSE;
       competition_ticks = 0;
       competition_running = true;
+      const bool sw0_bool = sw0 == GPIO_PIN_SET;
+      const bool sw1_bool = sw1 == GPIO_PIN_SET;
+      skip_warehouse_b_after_black_block = !sw0_bool && sw1_bool;
       // block_holder_servo.set_position(BLOCK_HOLDER_OPEN_POSITION);
       // watering_can_servo.set_position(WATERING_CAN_RELEASE_POSITION);
       stop_drive_wheels();
-      set_auto_control_mode(AutoControlMode::START_TO_C);
+      if (sw0_bool && sw1_bool) {
+        set_auto_control_mode(AutoControlMode::WATERING_TO_A_RELAY);
+      } else if (sw0_bool) {
+        set_auto_control_mode(AutoControlMode::GARDEN_TO_B);
+      } else {
+        set_auto_control_mode(AutoControlMode::START_TO_C);
+      }
       break;
     }
     if (ps3.get_key_down(PS3Key::CIRCLE)) {
@@ -425,7 +435,8 @@ void timer_callback(void *) {
     break;
 
   case AutoControlMode::WAIT_PUT_BLACK_BLOCK:
-    wait_for_mecha(AutoControlMode::BACK_FROM_BLACK_BLOCK_GARDEN);
+    wait_for_mecha(skip_warehouse_b_after_black_block ? AutoControlMode::WATERING_TO_A_RELAY
+                                                      : AutoControlMode::BACK_FROM_BLACK_BLOCK_GARDEN);
     break;
 
   case AutoControlMode::BACK_FROM_BLACK_BLOCK_GARDEN:
