@@ -154,8 +154,7 @@ constexpr Pose GARDEN_WHITE_BLOCK_POSE{1.65f, 0.90f, 0.5f * std::numbers::pi};
 constexpr Pose GARDEN_WATERING_POSE{1.65f, 1.20f, -0.5f * std::numbers::pi};
 // ↓作業後の座標
 constexpr Pose WAREHOUSE_C_EXIT_POSE{0.9f, WAREHOUSE_C_POSE.y, WAREHOUSE_C_POSE.yaw};
-constexpr Pose WAREHOUSE_C_EXIT_ROTATED_POSE{WAREHOUSE_C_EXIT_POSE.x, WAREHOUSE_C_EXIT_POSE.y,
-                                             0.5f * std::numbers::pi};
+constexpr Pose WAREHOUSE_C_EXIT_ROTATED_POSE{WAREHOUSE_C_EXIT_POSE.x, WAREHOUSE_C_EXIT_POSE.y, 0.5f * std::numbers::pi};
 constexpr Pose GARDEN_BLACK_BLOCK_BACK_POSE{GARDEN_BLACK_BLOCK_POSE.x - BLOCK_BACK_DISTANCE, GARDEN_BLACK_BLOCK_POSE.y,
                                             GARDEN_BLACK_BLOCK_POSE.yaw};
 constexpr Pose GARDEN_BLACK_BLOCK_EXIT_POSE{GARDEN_BLACK_BLOCK_BACK_POSE.x, GARDEN_BLACK_BLOCK_BACK_POSE.y,
@@ -304,6 +303,13 @@ void timer_callback(void *) {
       set_auto_control_mode(AutoControlMode::START_TO_C);
       break;
     }
+    if (ps3.get_key_down(PS3Key::CIRCLE)) {
+      robot_pose = R2_START_POSE;
+      competition_ticks = 0;
+      competition_running = true;
+      stop_drive_wheels();
+      set_auto_control_mode(AutoControlMode::GARDEN_TO_B);
+    }
     // // メモ　デバッグするときは下のコメントアウトを外してset_auto_control_modeをコメントアウトする
     if (ps3.get_key_down(PS3Key::LEFT)) {
       block_holder_servo.set_position(BLOCK_HOLDER_OPEN_POSITION);
@@ -347,6 +353,7 @@ void timer_callback(void *) {
     break;
 
   case AutoControlMode::GET_BLACK_BLOCK:
+    watering_can_servo.set_position(WATERING_CAN_PULL_POSITION);
     collect_block();
     waiting_ticks_mecha = 0;
     set_auto_control_mode(AutoControlMode::WAIT_GET_BLACK_BLOCK);
