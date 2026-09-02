@@ -8,7 +8,6 @@
 #include <halx/driver/gpio.hpp>
 #include <halx/driver/uart_base.hpp>
 #include <halx/driver/uart_dma.hpp>
-#include <halx/driver/uart_it.hpp>
 #include <halx/peripheral.hpp>
 
 #include "bno055.hpp"
@@ -34,8 +33,21 @@ extern I2C_HandleTypeDef hi2c3;
 
 using halx::driver::GPIO;
 using halx::driver::UART_DMA;
-using halx::driver::UART_IT;
 using halx::peripheral::ST_TIM;
+
+class BlockingUART final : public halx::driver::UARTBase {
+public:
+  bool start() override { return true; }
+  bool stop() override { return true; }
+
+  bool write(const uint8_t *data, size_t size, uint32_t timeout) override {
+    return HAL_UART_Transmit(&hlpuart1, const_cast<uint8_t *>(data), static_cast<uint16_t>(size), timeout) == HAL_OK;
+  }
+
+  bool read(uint8_t *, size_t, uint32_t) override { return false; }
+  void clear() override {}
+  size_t available() const override { return 0; }
+};
 
 constexpr float CONTROL_DT = 0.01f;
 
@@ -68,7 +80,7 @@ constexpr PIDParameters P2P_YAW_PID_PARAMS{
     .output_upper_limit = std::numbers::pi,
 };
 
-UART_IT<&hlpuart1> lpuart1;
+BlockingUART debug_uart;
 uint8_t uart4_tx_buf[512];
 uint8_t uart4_rx_buf[512];
 UART_DMA<&huart4> uart4(uart4_tx_buf, sizeof(uart4_tx_buf), uart4_rx_buf, sizeof(uart4_rx_buf));
@@ -236,11 +248,17 @@ volatile GPIO_PinState sw0 = GPIO_PIN_RESET;
 volatile GPIO_PinState sw1 = GPIO_PIN_RESET;
 volatile GPIO_PinState sw2 = GPIO_PIN_RESET;
 extern "C" void app_main() {
-  halx::driver::enable_stdout(lpuart1);
+  hlpuart1.Init.BaudRate = 115200;
+  if (HAL_UART_Init(&hlpuart1) != HAL_OK) {
+    Error_Handler();
+  }
+  halx::driver::enable_stdout(debug_uart);
 
   uart4.start();
   uart5.start();
-  lpuart1.start();
+  debug_uart.start();
+
+  std::printf("GPIO test started\r\n");
 
   motor1_encoder.start();
   motor2_encoder.start();
