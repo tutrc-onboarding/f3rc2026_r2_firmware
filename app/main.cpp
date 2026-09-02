@@ -6,6 +6,7 @@
 
 #include <halx/core.hpp>
 #include <halx/driver/gpio.hpp>
+#include <halx/driver/uart_base.hpp>
 #include <halx/driver/uart_dma.hpp>
 #include <halx/driver/uart_it.hpp>
 #include <halx/peripheral.hpp>
@@ -145,7 +146,7 @@ constexpr Pose R2_START_POSE{0.0f, 0.0f, -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_C_POSE{-1.40f, 0.25f, -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_C_WAIT_POSE{WAREHOUSE_C_POSE.x + WAREHOUSE_WAIT_OFFSET_X, WAREHOUSE_C_POSE.y,
                                      WAREHOUSE_C_POSE.yaw};
-constexpr Pose WAREHOUSE_B_POSE{-1.30f, 0.90f, -0.5f * std::numbers::pi};
+constexpr Pose WAREHOUSE_B_POSE{-1.10f, 0.95, -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_B_WAIT_POSE{WAREHOUSE_B_POSE.x + WAREHOUSE_WAIT_OFFSET_X, WAREHOUSE_B_POSE.y,
                                      WAREHOUSE_B_POSE.yaw};
 constexpr Pose WAREHOUSE_A_POSE{-1.30f, 1.725f, -0.5f * std::numbers::pi};
@@ -153,13 +154,12 @@ constexpr Pose GARDEN_BLACK_BLOCK_POSE{1.65f, 1.725f, 0.5f * std::numbers::pi};
 constexpr Pose GARDEN_WHITE_BLOCK_POSE{1.65f, 0.90f, 0.5f * std::numbers::pi};
 constexpr Pose GARDEN_WATERING_POSE{1.65f, 1.20f, -0.5f * std::numbers::pi};
 // ↓作業後の座標
-constexpr Pose WAREHOUSE_C_EXIT_POSE{0.9f, WAREHOUSE_C_POSE.y, WAREHOUSE_C_POSE.yaw};
+constexpr Pose WAREHOUSE_C_EXIT_POSE{WAREHOUSE_C_POSE.x, 0.0f, WAREHOUSE_C_POSE.yaw};
 constexpr Pose WAREHOUSE_C_EXIT_ROTATED_POSE{WAREHOUSE_C_EXIT_POSE.x, WAREHOUSE_C_EXIT_POSE.y, 0.5f * std::numbers::pi};
 constexpr Pose GARDEN_BLACK_BLOCK_BACK_POSE{GARDEN_BLACK_BLOCK_POSE.x - BLOCK_BACK_DISTANCE, GARDEN_BLACK_BLOCK_POSE.y,
                                             GARDEN_BLACK_BLOCK_POSE.yaw};
-constexpr Pose GARDEN_BLACK_BLOCK_EXIT_POSE{GARDEN_BLACK_BLOCK_BACK_POSE.x, GARDEN_BLACK_BLOCK_BACK_POSE.y,
-                                            -0.5f * std::numbers::pi};
-constexpr Pose WAREHOUSE_B_EXIT_POSE{WAREHOUSE_B_POSE.x, WAREHOUSE_B_POSE.y, 0.5f * std::numbers::pi};
+constexpr Pose WAREHOUSE_B_EXIT_POSE{WAREHOUSE_B_POSE.x, 0.0f, WAREHOUSE_B_POSE.yaw};
+constexpr Pose WAREHOUSE_B_EXIT_ROTATED_POSE{WAREHOUSE_B_EXIT_POSE.x, WAREHOUSE_B_EXIT_POSE.y, 0.5f * std::numbers::pi};
 constexpr Pose GARDEN_WHITE_BLOCK_BACK_POSE{GARDEN_WHITE_BLOCK_POSE.x - BLOCK_BACK_DISTANCE, GARDEN_WHITE_BLOCK_POSE.y,
                                             GARDEN_WHITE_BLOCK_POSE.yaw};
 constexpr Pose GARDEN_WHITE_BLOCK_EXIT_POSE{GARDEN_WHITE_BLOCK_BACK_POSE.x, GARDEN_WHITE_BLOCK_BACK_POSE.y,
@@ -183,13 +183,13 @@ enum class AutoControlMode {
   PUT_BLACK_BLOCK,
   WAIT_PUT_BLACK_BLOCK,
   BACK_FROM_BLACK_BLOCK_GARDEN,
-  ROTATE_AFTER_BLACK_BLOCK,
   /// 自動機がBの白ブロックを２個回収するかも、ということで書いておいた　使わないかも
   GARDEN_TO_B,
   ENTER_WAREHOUSE_B,
   GET_WHITE_BLOCK,
   WAIT_GET_WHITE_BLOCK,
   EXIT_WAREHOUSE_B,
+  ROTATE_AFTER_EXIT_WAREHOUSE_B,
   B_TO_GARDEN,
   PUT_WHITE_BLOCK,
   WAIT_PUT_WHITE_BLOCK,
@@ -222,10 +222,19 @@ void set_auto_control_mode(AutoControlMode mode);
 void move_to_pose(const Pose &target_pose, AutoControlMode next_mode, float max_translation_speed = 0.0f,
                   float x_position_tolerance = SEQUENCE_X_POSITION_TOLERANCE,
                   float y_position_tolerance = SEQUENCE_Y_POSITION_TOLERANCE);
+void move_to_position_without_rotation(const Pose &target_pose, AutoControlMode next_mode);
+void rotate_without_translation(const Pose &target_pose, AutoControlMode next_mode);
 void wait_for_mecha(AutoControlMode next_mode);
 void move_servo(FeetechPositionControl &servo, float target_position);
 void collect_block();
 void move_to_pose_watering(const Pose &target_pose, AutoControlMode next_mode, float max_translation_speed = 0.0f);
+
+// std::atomic<int> sw0 = 0;
+// std::atomic<int> sw1 = 0;
+// std::atomic<int> sw2 = 0;
+volatile GPIO_PinState sw0 = GPIO_PIN_RESET;
+volatile GPIO_PinState sw1 = GPIO_PIN_RESET;
+volatile GPIO_PinState sw2 = GPIO_PIN_RESET;
 extern "C" void app_main() {
   halx::driver::enable_stdout(lpuart1);
 
@@ -263,7 +272,8 @@ extern "C" void app_main() {
     //        debug_pose_yaw.load(), block_holder_servo.get_position(), watering_can_servo.get_position());
     // printf("block_holder_pos %d\n\r", static_cast<int>(block_holder_servo.get_position()));
     // printf("yaw %f\n\r", debug_pose_yaw.load());
-    printf("%f %f %f", motor1_encoder.get_position(), motor2_encoder.get_position(), motor3_encoder.get_position());
+    // printf("%f %f %f", motor1_encoder.get_position(), motor2_encoder.get_position(), motor3_encoder.get_position());
+    printf("SW0=%d SW1=%d SW2=%d\r\n", static_cast<int>(sw0), static_cast<int>(sw1), static_cast<int>(sw2));
     halx::core::delay(10);
   }
 }
@@ -275,9 +285,22 @@ void timer_callback(void *) {
   x_encoder.update();
   y_encoder.update();
   ps3.update();
-
+  sw1 = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13);
+  sw0 = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_7);
+  sw2 = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_14);
   update_localization();
 
+  if (sw0 == 0) {
+    block_holder_servo.set_position(BLOCK_HOLDER_OPEN_POSITION);
+  } else if (sw0 == 1) {
+    block_holder_servo.set_position(BLOCK_HOLDER_CLOSED_POSITION);
+  }
+  if (sw1 == 0) {
+    watering_can_servo.set_position(WATERING_CAN_PULL_POSITION);
+
+  } else if (sw1 == 1) {
+    watering_can_servo.set_position(WATERING_CAN_COLLECT_POSITION);
+  }
   if (ps3.get_key_down(PS3Key::SELECT)) {
     competition_running = false;
     stop_drive_wheels_for_pause();
@@ -364,12 +387,11 @@ void timer_callback(void *) {
     break;
 
   case AutoControlMode::EXIT_WAREHOUSE_C:
-    move_to_pose(WAREHOUSE_C_EXIT_POSE, AutoControlMode::ROTATE_AFTER_EXIT_WAREHOUSE_C, 0.0f,
-                 WAREHOUSE_ENTRY_POSITION_TOLERANCE, WAREHOUSE_ENTRY_POSITION_TOLERANCE);
+    move_to_position_without_rotation(WAREHOUSE_C_EXIT_POSE, AutoControlMode::ROTATE_AFTER_EXIT_WAREHOUSE_C);
     break;
 
   case AutoControlMode::ROTATE_AFTER_EXIT_WAREHOUSE_C:
-    move_to_pose(WAREHOUSE_C_EXIT_ROTATED_POSE, AutoControlMode::C_TO_GARDEN);
+    rotate_without_translation(WAREHOUSE_C_EXIT_ROTATED_POSE, AutoControlMode::C_TO_GARDEN);
     break;
 
   case AutoControlMode::C_TO_GARDEN:
@@ -387,11 +409,7 @@ void timer_callback(void *) {
     break;
 
   case AutoControlMode::BACK_FROM_BLACK_BLOCK_GARDEN:
-    move_to_pose(GARDEN_BLACK_BLOCK_BACK_POSE, AutoControlMode::ROTATE_AFTER_BLACK_BLOCK);
-    break;
-
-  case AutoControlMode::ROTATE_AFTER_BLACK_BLOCK:
-    move_to_pose(GARDEN_BLACK_BLOCK_EXIT_POSE, AutoControlMode::GARDEN_TO_B);
+    move_to_pose(GARDEN_BLACK_BLOCK_BACK_POSE, AutoControlMode::GARDEN_TO_B);
     break;
 
   case AutoControlMode::GARDEN_TO_B:
@@ -416,7 +434,12 @@ void timer_callback(void *) {
     break;
 
   case AutoControlMode::EXIT_WAREHOUSE_B:
-    move_to_pose(WAREHOUSE_B_EXIT_POSE, AutoControlMode::B_TO_GARDEN);
+    move_to_position_without_rotation(WAREHOUSE_B_EXIT_POSE, AutoControlMode::ROTATE_AFTER_EXIT_WAREHOUSE_B);
+    break;
+
+  case AutoControlMode::ROTATE_AFTER_EXIT_WAREHOUSE_B:
+    rotate_without_translation(WAREHOUSE_B_EXIT_ROTATED_POSE, AutoControlMode::B_TO_GARDEN);
+
     break;
 
   case AutoControlMode::B_TO_GARDEN:
@@ -528,6 +551,38 @@ void move_to_pose(const Pose &target_pose, AutoControlMode next_mode, float max_
 
   drive_wheels(target_velocity);
 }
+
+void move_to_position_without_rotation(const Pose &target_pose, AutoControlMode next_mode) {
+  const float delta_x = target_pose.x - robot_pose.x;
+  const float delta_y = target_pose.y - robot_pose.y;
+
+  if (std::abs(delta_x) <= SEQUENCE_X_POSITION_TOLERANCE && std::abs(delta_y) <= SEQUENCE_Y_POSITION_TOLERANCE) {
+    stop_drive_wheels();
+    set_auto_control_mode(next_mode);
+    return;
+  }
+
+  Velocity target_velocity = calculate_velocity(robot_pose, target_pose);
+  target_velocity.yaw = 0.0f;
+  drive_wheels(target_velocity);
+}
+
+void rotate_without_translation(const Pose &target_pose, AutoControlMode next_mode) {
+  const float delta_yaw = std::remainder(target_pose.yaw - robot_pose.yaw, 2.0f * std::numbers::pi);
+
+  if (std::abs(delta_yaw) <= SEQUENCE_YAW_TOLERANCE) {
+    stop_drive_wheels();
+    set_auto_control_mode(next_mode);
+    return;
+  }
+
+  const Pose rotation_target{robot_pose.x, robot_pose.y, target_pose.yaw};
+  Velocity target_velocity = calculate_velocity(robot_pose, rotation_target);
+  target_velocity.x = 0.0f;
+  target_velocity.y = 0.0f;
+  drive_wheels(target_velocity);
+}
+
 void move_to_pose_watering(const Pose &target_pose, AutoControlMode next_mode, float max_translation_speed) {
   const float delta_x = target_pose.x - robot_pose.x;
   const float delta_y = target_pose.y - robot_pose.y;
