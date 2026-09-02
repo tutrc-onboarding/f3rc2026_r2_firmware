@@ -166,12 +166,13 @@ constexpr Pose GARDEN_BLACK_BLOCK_POSE{1.65f, 1.725f, 0.5f * std::numbers::pi};
 constexpr Pose GARDEN_WHITE_BLOCK_POSE{1.65f, 0.90f, 0.5f * std::numbers::pi};
 constexpr Pose GARDEN_WATERING_POSE{1.65f, 1.20f, -0.5f * std::numbers::pi};
 // ↓作業後の座標
-constexpr Pose WAREHOUSE_C_EXIT_POSE{WAREHOUSE_C_POSE.x, 0.0f, WAREHOUSE_C_POSE.yaw};
-constexpr Pose WAREHOUSE_C_EXIT_ROTATED_POSE{WAREHOUSE_C_EXIT_POSE.x, WAREHOUSE_C_EXIT_POSE.y, 0.5f * std::numbers::pi};
+constexpr Pose WAREHOUSE_C_EXIT_POSE{-0.4f, 0.25f, WAREHOUSE_C_POSE.yaw};
+constexpr Pose WAREHOUSE_C_EXIT_ROTATED_POSE{WAREHOUSE_C_EXIT_POSE.x, WAREHOUSE_C_EXIT_POSE.y, WAREHOUSE_C_POSE.yaw};
 constexpr Pose GARDEN_BLACK_BLOCK_BACK_POSE{GARDEN_BLACK_BLOCK_POSE.x - BLOCK_BACK_DISTANCE, GARDEN_BLACK_BLOCK_POSE.y,
                                             GARDEN_BLACK_BLOCK_POSE.yaw};
-constexpr Pose WAREHOUSE_B_EXIT_POSE{WAREHOUSE_B_POSE.x, 0.0f, WAREHOUSE_B_POSE.yaw};
-constexpr Pose WAREHOUSE_B_EXIT_ROTATED_POSE{WAREHOUSE_B_EXIT_POSE.x, WAREHOUSE_B_EXIT_POSE.y, 0.5f * std::numbers::pi};
+constexpr Pose WAREHOUSE_B_EXIT_POSE{-0.4f, WAREHOUSE_B_POSE.y, WAREHOUSE_B_POSE.yaw};
+constexpr Pose WAREHOUSE_B_EXIT_ROTATED_POSE{WAREHOUSE_B_EXIT_POSE.x, WAREHOUSE_B_EXIT_POSE.y,
+                                             WAREHOUSE_B_EXIT_POSE.yaw};
 constexpr Pose GARDEN_WHITE_BLOCK_BACK_POSE{GARDEN_WHITE_BLOCK_POSE.x - BLOCK_BACK_DISTANCE, GARDEN_WHITE_BLOCK_POSE.y,
                                             GARDEN_WHITE_BLOCK_POSE.yaw};
 constexpr Pose GARDEN_WHITE_BLOCK_EXIT_POSE{GARDEN_WHITE_BLOCK_BACK_POSE.x, GARDEN_WHITE_BLOCK_BACK_POSE.y,
@@ -291,7 +292,8 @@ extern "C" void app_main() {
     // printf("block_holder_pos %d\n\r", static_cast<int>(block_holder_servo.get_position()));
     // printf("yaw %f\n\r", debug_pose_yaw.load());
     // printf("%f %f %f", motor1_encoder.get_position(), motor2_encoder.get_position(), motor3_encoder.get_position());
-    printf("SW0=%d SW1=%d SW2=%d\r\n", static_cast<int>(sw0), static_cast<int>(sw1), static_cast<int>(sw2));
+    // printf("SW0=%d SW1=%d SW2=%d\r\n", static_cast<int>(sw0), static_cast<int>(sw1), static_cast<int>(sw2));
+    printf("X: %f Y: %f YAW: %f\r\n", debug_pose_x.load(), debug_pose_y.load(), debug_pose_yaw.load());
     halx::core::delay(10);
   }
 }
@@ -308,17 +310,17 @@ void timer_callback(void *) {
   sw2 = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_14);
   update_localization();
 
-  if (sw0 == 0) {
-    block_holder_servo.set_position(BLOCK_HOLDER_OPEN_POSITION);
-  } else if (sw0 == 1) {
-    block_holder_servo.set_position(BLOCK_HOLDER_CLOSED_POSITION);
-  }
-  if (sw1 == 0) {
-    watering_can_servo.set_position(WATERING_CAN_PULL_POSITION);
+  // if (sw0 == 0) {
+  //   block_holder_servo.set_position(BLOCK_HOLDER_OPEN_POSITION);
+  // } else if (sw0 == 1) {
+  //   block_holder_servo.set_position(BLOCK_HOLDER_CLOSED_POSITION);
+  // }
+  // if (sw1 == 0) {
+  //   watering_can_servo.set_position(WATERING_CAN_PULL_POSITION);
 
-  } else if (sw1 == 1) {
-    watering_can_servo.set_position(WATERING_CAN_COLLECT_POSITION);
-  }
+  // } else if (sw1 == 1) {
+  //   watering_can_servo.set_position(WATERING_CAN_COLLECT_POSITION);
+  // }
   if (ps3.get_key_down(PS3Key::SELECT)) {
     competition_running = false;
     stop_drive_wheels_for_pause();
