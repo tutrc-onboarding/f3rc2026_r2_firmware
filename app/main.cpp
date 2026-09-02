@@ -144,6 +144,7 @@ constexpr float SEQUENCE_Y_POSITION_TOLERANCE = 0.05f;      // [m] y軸方向の
 constexpr float SEQUENCE_YAW_TOLERANCE = 0.025f;            // [rad] 角度の許容誤差
 constexpr float WAREHOUSE_ENTRY_POSITION_TOLERANCE = 0.01f; // [m] 倉庫進入時の座標調整を確実に反映するための許容誤差
 constexpr float WAREHOUSE_ENTRY_MAX_SPEED = 0.15f;          // [m/s] 待機点から回収点までの最大並進速度
+constexpr float WATERING_RELAY_MIN_SPEED = 0.4f;            // [m/s] 中継点を通過する際の最低並進速度
 constexpr float WAREHOUSE_WAIT_OFFSET_X = 0.20f;            // [m] 回収点から待機点までのx方向オフセット
 constexpr float BLOCK_BACK_DISTANCE = 0.35f;                // [m] ブロック配置後の後退距離
 constexpr uint32_t WAIT_TICKS_MECHA = 25;                   // [1/100秒] 回収・設置後に～秒待つ
@@ -156,33 +157,37 @@ bool skip_warehouse_b_after_black_block = false;
 
 // R2スタートゾーンの中心を原点、右を+x、上を+y
 constexpr Pose R2_START_POSE{0.0f, 0.0f, -0.5f * std::numbers::pi};
+
+// 黒ブロック回収・設置
 constexpr Pose WAREHOUSE_C_POSE{-1.40f, 0.25f, -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_C_WAIT_POSE{WAREHOUSE_C_POSE.x + WAREHOUSE_WAIT_OFFSET_X, WAREHOUSE_C_POSE.y,
                                      WAREHOUSE_C_POSE.yaw};
+constexpr Pose WAREHOUSE_C_EXIT_POSE{0.0f, 0.25f, WAREHOUSE_C_POSE.yaw};
+constexpr Pose WAREHOUSE_C_EXIT_ROTATED_POSE{WAREHOUSE_C_EXIT_POSE.x, WAREHOUSE_C_EXIT_POSE.y, WAREHOUSE_C_POSE.yaw};
+constexpr Pose GARDEN_BLACK_BLOCK_POSE{1.65f, 1.725f, 0.5f * std::numbers::pi};
+constexpr Pose GARDEN_BLACK_BLOCK_BACK_POSE{GARDEN_BLACK_BLOCK_POSE.x - BLOCK_BACK_DISTANCE, GARDEN_BLACK_BLOCK_POSE.y,
+                                            GARDEN_BLACK_BLOCK_POSE.yaw};
+
+// 白ブロック回収・設置
 constexpr Pose WAREHOUSE_B_POSE{-1.10f, 0.95, -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_B_WAIT_POSE{WAREHOUSE_B_POSE.x + WAREHOUSE_WAIT_OFFSET_X, WAREHOUSE_B_POSE.y,
                                      WAREHOUSE_B_POSE.yaw};
-constexpr Pose WAREHOUSE_A_POSE{-1.30f, 1.725f, -0.5f * std::numbers::pi};
-constexpr Pose GARDEN_BLACK_BLOCK_POSE{1.65f, 1.725f, 0.5f * std::numbers::pi};
-constexpr Pose GARDEN_WHITE_BLOCK_POSE{1.65f, 0.85f, 0.5f * std::numbers::pi};
-constexpr Pose GARDEN_WATERING_POSE{1.65f, 0.25f, -0.5f * std::numbers::pi};
-// ↓作業後の座標
-constexpr Pose WAREHOUSE_C_EXIT_POSE{-0.4f, 0.25f, WAREHOUSE_C_POSE.yaw};
-constexpr Pose WAREHOUSE_C_EXIT_ROTATED_POSE{WAREHOUSE_C_EXIT_POSE.x, WAREHOUSE_C_EXIT_POSE.y, WAREHOUSE_C_POSE.yaw};
-constexpr Pose GARDEN_BLACK_BLOCK_BACK_POSE{GARDEN_BLACK_BLOCK_POSE.x - BLOCK_BACK_DISTANCE, GARDEN_BLACK_BLOCK_POSE.y,
-                                            GARDEN_BLACK_BLOCK_POSE.yaw};
 constexpr Pose WAREHOUSE_B_EXIT_POSE{-0.4f, WAREHOUSE_B_POSE.y, WAREHOUSE_B_POSE.yaw};
 constexpr Pose WAREHOUSE_B_EXIT_ROTATED_POSE{WAREHOUSE_B_EXIT_POSE.x, WAREHOUSE_B_EXIT_POSE.y,
                                              WAREHOUSE_B_EXIT_POSE.yaw};
+constexpr Pose GARDEN_WHITE_BLOCK_POSE{1.65f, 0.85f, 0.5f * std::numbers::pi};
 constexpr Pose GARDEN_WHITE_BLOCK_BACK_POSE{GARDEN_WHITE_BLOCK_POSE.x - BLOCK_BACK_DISTANCE, GARDEN_WHITE_BLOCK_POSE.y,
                                             GARDEN_WHITE_BLOCK_POSE.yaw};
 constexpr Pose GARDEN_WHITE_BLOCK_EXIT_POSE{GARDEN_WHITE_BLOCK_BACK_POSE.x, GARDEN_WHITE_BLOCK_BACK_POSE.y,
                                             -0.5f * std::numbers::pi};
-constexpr Pose WATERING_WAREHOUSE_A{-1.3, 0.085f, -0.5f * std::numbers::pi};
+
+// 水やり（A中継点 → A →花壇 → C中継点 → C）
 constexpr Pose WATERING_WAREHOUSE_A_RELAY{-1.0, 0.085, -0.5f * std::numbers::pi};
-constexpr Pose WATERING_GARDEN{1.5f, 0.905f, -0.5f * std::numbers::pi};
-constexpr Pose WATERING_WAREHOUSE_C{-1.3, 1.725f, -0.5f * std::numbers::pi};
+constexpr Pose WATERING_WAREHOUSE_A{-1.4, 0.085f, -0.5f * std::numbers::pi};
+constexpr Pose WATERING_GARDEN{1.5f, 0.085f, -0.5f * std::numbers::pi};
 constexpr Pose WATERING_WAREHOUSE_C_RELAY{-1.0, 1.725f, -0.5f * std::numbers::pi};
+constexpr Pose WATERING_WAREHOUSE_C{-1.4, 1.725f, -0.5f * std::numbers::pi};
+
 // コントロールモード一覧
 enum class AutoControlMode {
   EMERGENCY_STOP,
@@ -242,6 +247,7 @@ void wait_for_mecha(AutoControlMode next_mode);
 void move_servo(FeetechPositionControl &servo, float target_position);
 void collect_block();
 void move_to_pose_watering(const Pose &target_pose, AutoControlMode next_mode, float max_translation_speed = 0.0f);
+void move_through_pose_watering(const Pose &relay_pose, const Pose &following_pose, AutoControlMode next_mode);
 
 // std::atomic<int> sw0 = 0;
 // std::atomic<int> sw1 = 0;
@@ -496,16 +502,20 @@ void timer_callback(void *) {
     break;
 
   case AutoControlMode::WAIT_FOR_WATERING:
-    waiting_ticks = waiting_ticks + 1;
-    // 邪魔だったら待機場所を設定してもいいかも
-    stop_drive_wheels();
-    if (waiting_ticks >= WATERING_START_TICKS) {
-      set_auto_control_mode(AutoControlMode::WATERING_TO_A_RELAY);
-    }
+    // waiting_ticks = waiting_ticks + 1;
+    // // 邪魔だったら待機場所を設定してもいいかも
+    // stop_drive_wheels();
+    // if (waiting_ticks >= WATERING_START_TICKS) {
+    //   set_auto_control_mode(AutoControlMode::WATERING_TO_A_RELAY);
+    // }
+
+    set_auto_control_mode(AutoControlMode::WATERING_TO_A_RELAY);
     break;
 
   case AutoControlMode::WATERING_TO_A_RELAY:
-    move_to_pose_watering(WATERING_WAREHOUSE_A_RELAY, AutoControlMode::WATERING_A_RELAY_TO_A);
+    watering_can_servo.set_position(3000);
+    move_through_pose_watering(WATERING_WAREHOUSE_A_RELAY, WATERING_WAREHOUSE_A,
+                               AutoControlMode::WATERING_A_RELAY_TO_A);
     break;
 
   case AutoControlMode::WATERING_A_RELAY_TO_A:
@@ -513,7 +523,8 @@ void timer_callback(void *) {
     break;
 
   case AutoControlMode::WATERING_A_TO_A_RELAY:
-    move_to_pose_watering(WATERING_WAREHOUSE_A_RELAY, AutoControlMode::WATERING_A_RELAY_TO_GARDEN);
+    move_through_pose_watering(WATERING_WAREHOUSE_A_RELAY, WATERING_GARDEN,
+                               AutoControlMode::WATERING_A_RELAY_TO_GARDEN);
     break;
 
   case AutoControlMode::WATERING_A_RELAY_TO_GARDEN:
@@ -521,7 +532,8 @@ void timer_callback(void *) {
     break;
 
   case AutoControlMode::WATERING_GARDEN_TO_C_RELAY:
-    move_to_pose_watering(WATERING_WAREHOUSE_C_RELAY, AutoControlMode::WATERING_C_RELAY_TO_C);
+    move_through_pose_watering(WATERING_WAREHOUSE_C_RELAY, WATERING_WAREHOUSE_C,
+                               AutoControlMode::WATERING_C_RELAY_TO_C);
     break;
 
   case AutoControlMode::WATERING_C_RELAY_TO_C:
@@ -529,7 +541,8 @@ void timer_callback(void *) {
     break;
 
   case AutoControlMode::WATERING_C_TO_C_RELAY:
-    move_to_pose_watering(WATERING_WAREHOUSE_C_RELAY, AutoControlMode::WATERING_C_RELAY_TO_GARDEN);
+    move_through_pose_watering(WATERING_WAREHOUSE_C_RELAY, WATERING_GARDEN,
+                               AutoControlMode::WATERING_C_RELAY_TO_GARDEN);
     break;
 
   case AutoControlMode::WATERING_C_RELAY_TO_GARDEN:
@@ -639,6 +652,36 @@ void move_to_pose_watering(const Pose &target_pose, AutoControlMode next_mode, f
 
   drive_wheels(target_velocity);
 }
+
+void move_through_pose_watering(const Pose &relay_pose, const Pose &following_pose, AutoControlMode next_mode) {
+  const float delta_x = relay_pose.x - robot_pose.x;
+  const float delta_y = relay_pose.y - robot_pose.y;
+  const float following_x = following_pose.x - relay_pose.x;
+  const float following_y = following_pose.y - relay_pose.y;
+
+  // Switch as soon as the robot reaches the relay or crosses the plane through it.
+  // Commanding the following pose in the same cycle keeps the velocity continuous.
+  const bool reached_relay =
+      std::abs(delta_x) <= SEQUENCE_X_POSITION_TOLERANCE && std::abs(delta_y) <= SEQUENCE_Y_POSITION_TOLERANCE;
+  const bool passed_relay =
+      (robot_pose.x - relay_pose.x) * following_x + (robot_pose.y - relay_pose.y) * following_y >= 0.0f;
+  if (reached_relay || passed_relay) {
+    set_auto_control_mode(next_mode);
+    drive_wheels(calculate_velocity(robot_pose, following_pose));
+    return;
+  }
+
+  Velocity target_velocity = calculate_velocity(robot_pose, relay_pose);
+  const float translation_speed = std::hypot(target_velocity.x, target_velocity.y);
+  if (translation_speed > 0.0f && translation_speed < WATERING_RELAY_MIN_SPEED) {
+    const float speed_ratio = WATERING_RELAY_MIN_SPEED / translation_speed;
+    target_velocity.x *= speed_ratio;
+    target_velocity.y *= speed_ratio;
+  }
+
+  drive_wheels(target_velocity);
+}
+
 void move_servo(FeetechPositionControl &servo, float target_position) {
   stop_drive_wheels();
   servo.set_position(target_position);
