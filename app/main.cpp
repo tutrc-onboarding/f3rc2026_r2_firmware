@@ -111,7 +111,7 @@ BNO055<&hi2c3> imu;
 
 constexpr int BLOCK_HOLDER_OPEN_POSITION = 2414;
 constexpr int BLOCK_HOLDER_CLOSED_POSITION = 3797;
-constexpr int WATERING_CAN_PULL_POSITION = 2575;
+constexpr int WATERING_CAN_PULL_POSITION = 3000;
 constexpr int WATERING_CAN_COLLECT_POSITION = 1898;
 
 FeetechPositionControl block_holder_servo(uart5, 1, 3787); // 2414-3146
@@ -144,9 +144,10 @@ constexpr float SEQUENCE_Y_POSITION_TOLERANCE = 0.05f;      // [m] y軸方向の
 constexpr float SEQUENCE_YAW_TOLERANCE = 0.025f;            // [rad] 角度の許容誤差
 constexpr float WAREHOUSE_ENTRY_POSITION_TOLERANCE = 0.01f; // [m] 倉庫進入時の座標調整を確実に反映するための許容誤差
 constexpr float WAREHOUSE_ENTRY_MAX_SPEED = 0.15f;          // [m/s] 待機点から回収点までの最大並進速度
+constexpr float WAREHOUSE_EXIT_MIN_SPEED = 0.4f;            // [m/s] 倉庫退出時の最低並進速度
 constexpr float WATERING_RELAY_MIN_SPEED = 0.4f;            // [m/s] 中継点を通過する際の最低並進速度
 constexpr float WAREHOUSE_WAIT_OFFSET_X = 0.20f;            // [m] 回収点から待機点までのx方向オフセット
-constexpr float BLOCK_BACK_DISTANCE = 0.35f;                // [m] ブロック配置後の後退距離
+constexpr float BLOCK_BACK_DISTANCE = 1.0f;                 // [m] ブロック配置後の後退距離
 constexpr uint32_t WAIT_TICKS_MECHA = 25;                   // [1/100秒] 回収・設置後に～秒待つ
 constexpr uint32_t WATERING_START_TICKS = 500; // [1/100秒]倉庫Bから白ブロックを運んでから何秒待って水やりを開始するか
 uint32_t competition_ticks = 0;                // 競技時間を計測
@@ -165,8 +166,8 @@ constexpr Pose WAREHOUSE_C_WAIT_POSE{WAREHOUSE_C_POSE.x + WAREHOUSE_WAIT_OFFSET_
 constexpr Pose WAREHOUSE_C_EXIT_POSE{0.0f, 0.25f, WAREHOUSE_C_POSE.yaw};
 constexpr Pose WAREHOUSE_C_EXIT_ROTATED_POSE{WAREHOUSE_C_EXIT_POSE.x, WAREHOUSE_C_EXIT_POSE.y, WAREHOUSE_C_POSE.yaw};
 constexpr Pose GARDEN_BLACK_BLOCK_POSE{1.65f, 1.725f, 0.5f * std::numbers::pi};
-constexpr Pose GARDEN_BLACK_BLOCK_BACK_POSE{GARDEN_BLACK_BLOCK_POSE.x - BLOCK_BACK_DISTANCE, GARDEN_BLACK_BLOCK_POSE.y,
-                                            GARDEN_BLACK_BLOCK_POSE.yaw};
+constexpr Pose GARDEN_BLACK_BLOCK_BACK_POSE{GARDEN_BLACK_BLOCK_POSE.x - BLOCK_BACK_DISTANCE,
+                                            GARDEN_BLACK_BLOCK_POSE.y - 0.5f, GARDEN_BLACK_BLOCK_POSE.yaw};
 
 // 白ブロック回収・設置
 constexpr Pose WAREHOUSE_B_POSE{-1.10f, 0.95, -0.5f * std::numbers::pi};
@@ -176,8 +177,8 @@ constexpr Pose WAREHOUSE_B_EXIT_POSE{-0.4f, WAREHOUSE_B_POSE.y, WAREHOUSE_B_POSE
 constexpr Pose WAREHOUSE_B_EXIT_ROTATED_POSE{WAREHOUSE_B_EXIT_POSE.x, WAREHOUSE_B_EXIT_POSE.y,
                                              WAREHOUSE_B_EXIT_POSE.yaw};
 constexpr Pose GARDEN_WHITE_BLOCK_POSE{1.65f, 0.85f, 0.5f * std::numbers::pi};
-constexpr Pose GARDEN_WHITE_BLOCK_BACK_POSE{GARDEN_WHITE_BLOCK_POSE.x - BLOCK_BACK_DISTANCE, GARDEN_WHITE_BLOCK_POSE.y,
-                                            GARDEN_WHITE_BLOCK_POSE.yaw};
+constexpr Pose GARDEN_WHITE_BLOCK_BACK_POSE{GARDEN_WHITE_BLOCK_POSE.x - BLOCK_BACK_DISTANCE,
+                                            GARDEN_WHITE_BLOCK_POSE.y - 0.5f, GARDEN_WHITE_BLOCK_POSE.yaw};
 constexpr Pose GARDEN_WHITE_BLOCK_EXIT_POSE{GARDEN_WHITE_BLOCK_BACK_POSE.x, GARDEN_WHITE_BLOCK_BACK_POSE.y,
                                             -0.5f * std::numbers::pi};
 
@@ -241,7 +242,8 @@ void set_auto_control_mode(AutoControlMode mode);
 void move_to_pose(const Pose &target_pose, AutoControlMode next_mode, float max_translation_speed = 0.0f,
                   float x_position_tolerance = SEQUENCE_X_POSITION_TOLERANCE,
                   float y_position_tolerance = SEQUENCE_Y_POSITION_TOLERANCE);
-void move_to_position_without_rotation(const Pose &target_pose, AutoControlMode next_mode);
+void move_to_position_without_rotation(const Pose &target_pose, AutoControlMode next_mode,
+                                       float min_translation_speed = 0.0f);
 void rotate_without_translation(const Pose &target_pose, AutoControlMode next_mode);
 void wait_for_mecha(AutoControlMode next_mode);
 void move_servo(FeetechPositionControl &servo, float target_position);
@@ -423,7 +425,8 @@ void timer_callback(void *) {
     break;
 
   case AutoControlMode::EXIT_WAREHOUSE_C:
-    move_to_position_without_rotation(WAREHOUSE_C_EXIT_POSE, AutoControlMode::ROTATE_AFTER_EXIT_WAREHOUSE_C);
+    move_to_position_without_rotation(WAREHOUSE_C_EXIT_POSE, AutoControlMode::ROTATE_AFTER_EXIT_WAREHOUSE_C,
+                                      WAREHOUSE_EXIT_MIN_SPEED);
     break;
 
   case AutoControlMode::ROTATE_AFTER_EXIT_WAREHOUSE_C:
@@ -471,7 +474,8 @@ void timer_callback(void *) {
     break;
 
   case AutoControlMode::EXIT_WAREHOUSE_B:
-    move_to_position_without_rotation(WAREHOUSE_B_EXIT_POSE, AutoControlMode::ROTATE_AFTER_EXIT_WAREHOUSE_B);
+    move_to_position_without_rotation(WAREHOUSE_B_EXIT_POSE, AutoControlMode::ROTATE_AFTER_EXIT_WAREHOUSE_B,
+                                      WAREHOUSE_EXIT_MIN_SPEED);
     break;
 
   case AutoControlMode::ROTATE_AFTER_EXIT_WAREHOUSE_B:
@@ -596,7 +600,8 @@ void move_to_pose(const Pose &target_pose, AutoControlMode next_mode, float max_
   drive_wheels(target_velocity);
 }
 
-void move_to_position_without_rotation(const Pose &target_pose, AutoControlMode next_mode) {
+void move_to_position_without_rotation(const Pose &target_pose, AutoControlMode next_mode,
+                                       float min_translation_speed) {
   const float delta_x = target_pose.x - robot_pose.x;
   const float delta_y = target_pose.y - robot_pose.y;
 
@@ -608,6 +613,12 @@ void move_to_position_without_rotation(const Pose &target_pose, AutoControlMode 
 
   Velocity target_velocity = calculate_velocity(robot_pose, target_pose);
   target_velocity.yaw = 0.0f;
+  const float translation_speed = std::hypot(target_velocity.x, target_velocity.y);
+  if (translation_speed > 0.0f && translation_speed < min_translation_speed) {
+    const float speed_ratio = min_translation_speed / translation_speed;
+    target_velocity.x *= speed_ratio;
+    target_velocity.y *= speed_ratio;
+  }
   drive_wheels(target_velocity);
 }
 
