@@ -178,8 +178,8 @@ constexpr Pose WAREHOUSE_B_EXIT_POSE{-0.4f, WAREHOUSE_B_POSE.y, WAREHOUSE_B_POSE
 constexpr Pose WAREHOUSE_B_EXIT_ROTATED_POSE{WAREHOUSE_B_EXIT_POSE.x, WAREHOUSE_B_EXIT_POSE.y,
                                              WAREHOUSE_B_EXIT_POSE.yaw};
 constexpr Pose GARDEN_WHITE_BLOCK_POSE{1.8f, 0.85f, 0.5f * std::numbers::pi};
-constexpr Pose GARDEN_WHITE_BLOCK_BACK_POSE{GARDEN_WHITE_BLOCK_POSE.x - BLOCK_BACK_DISTANCE,
-                                            GARDEN_WHITE_BLOCK_POSE.y - 0.5f, GARDEN_WHITE_BLOCK_POSE.yaw};
+constexpr Pose GARDEN_WHITE_BLOCK_BACK_POSE{GARDEN_WHITE_BLOCK_POSE.x - BLOCK_BACK_DISTANCE, GARDEN_WHITE_BLOCK_POSE.y,
+                                            GARDEN_WHITE_BLOCK_POSE.yaw};
 constexpr Pose GARDEN_WHITE_BLOCK_EXIT_POSE{GARDEN_WHITE_BLOCK_BACK_POSE.x, GARDEN_WHITE_BLOCK_BACK_POSE.y,
                                             -0.5f * std::numbers::pi};
 
@@ -192,7 +192,6 @@ constexpr Pose WATERING_WAREHOUSE_C{-1.4, 1.725f, -0.5f * std::numbers::pi};
 
 // コントロールモード一覧
 enum class AutoControlMode {
-  EMERGENCY_STOP,
   MANUAL,
   START_TO_C,
   ENTER_WAREHOUSE_C,
@@ -232,7 +231,7 @@ enum class AutoControlMode {
 };
 
 Pose robot_pose = R2_START_POSE;
-AutoControlMode auto_control_mode = AutoControlMode::EMERGENCY_STOP;
+AutoControlMode auto_control_mode = AutoControlMode::MANUAL;
 
 void timer_callback(void *);
 void update_localization();
@@ -260,6 +259,7 @@ void move_through_pose_watering(const Pose &relay_pose, const Pose &following_po
 volatile GPIO_PinState sw0 = GPIO_PIN_RESET;
 volatile GPIO_PinState sw1 = GPIO_PIN_RESET;
 volatile GPIO_PinState sw2 = GPIO_PIN_RESET;
+volatile GPIO_PinState sw_start = GPIO_PIN_RESET;
 extern "C" void app_main() {
   hlpuart1.Init.BaudRate = 115200;
   if (HAL_UART_Init(&hlpuart1) != HAL_OK) {
@@ -304,8 +304,10 @@ extern "C" void app_main() {
     // printf("block_holder_pos %d\n\r", static_cast<int>(block_holder_servo.get_position()));
     // printf("yaw %f\n\r", debug_pose_yaw.load());
     // printf("%f %f %f", motor1_encoder.get_position(), motor2_encoder.get_position(), motor3_encoder.get_position());
-    // printf("SW0=%d SW1=%d SW2=%d\r\n", static_cast<int>(sw0), static_cast<int>(sw1), static_cast<int>(sw2));
-    printf("X: %f Y: %f YAW: %f\r\n", debug_pose_x.load(), debug_pose_y.load(), debug_pose_yaw.load());
+    // printf("SW0=%d SW1=%d SW2=%d SW_START %d\r\n", static_cast<int>(sw0), static_cast<int>(sw1),
+    // static_cast<int>(sw2),
+    //        static_cast<int>(sw_start));
+    // printf("X: %f Y: %f YAW: %f\r\n", debug_pose_x.load(), debug_pose_y.load(), debug_pose_yaw.load());
     halx::core::delay(10);
   }
 }
@@ -320,6 +322,8 @@ void timer_callback(void *) {
   sw1 = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13);
   sw0 = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_7);
   sw2 = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_14);
+  sw_start = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_9);
+
   update_localization();
 
   // if (sw0 == 0) {
@@ -340,15 +344,15 @@ void timer_callback(void *) {
   }
 
   switch (auto_control_mode) {
-  case AutoControlMode::EMERGENCY_STOP:
-    stop_drive_wheels();
-    if (ps3.get_key(PS3Key::L1) && ps3.get_key(PS3Key::R1)) {
-      set_auto_control_mode(AutoControlMode::MANUAL);
-    }
-    break;
+    // case AutoControlMode::EMERGENCY_STOP:
+    //   stop_drive_wheels();
+    //   if (ps3.get_key(PS3Key::L1) && ps3.get_key(PS3Key::R1)) {
+    //     set_auto_control_mode(AutoControlMode::MANUAL);
+    //   }
+    //   break;
 
   case AutoControlMode::MANUAL: {
-    if (ps3.get_key_down(PS3Key::START)) {
+    if (ps3.get_key_down(PS3Key::START) or sw_start == 0) {
       robot_pose = R2_START_POSE;
       competition_ticks = 0;
       competition_running = true;
@@ -367,13 +371,13 @@ void timer_callback(void *) {
       }
       break;
     }
-    if (ps3.get_key_down(PS3Key::CIRCLE)) {
-      robot_pose = R2_START_POSE;
-      competition_ticks = 0;
-      competition_running = true;
-      stop_drive_wheels();
-      set_auto_control_mode(AutoControlMode::GARDEN_TO_B);
-    }
+    // if (ps3.get_key_down(PS3Key::CIRCLE)) {
+    //   robot_pose = R2_START_POSE;
+    //   competition_ticks = 0;
+    //   competition_running = true;
+    //   stop_drive_wheels();
+    //   set_auto_control_mode(AutoControlMode::GARDEN_TO_B);
+    // }
     // // メモ　デバッグするときは下のコメントアウトを外してset_auto_control_modeをコメントアウトする
     if (ps3.get_key_down(PS3Key::LEFT)) {
       block_holder_servo.set_position(BLOCK_HOLDER_OPEN_POSITION);
@@ -511,7 +515,8 @@ void timer_callback(void *) {
     break;
 
   case AutoControlMode::BACK_FROM_WHITE_BLOCK_GARDEN:
-    move_to_pose(GARDEN_WHITE_BLOCK_BACK_POSE, AutoControlMode::ROTATE_AFTER_WHITE_BLOCK);
+    move_to_pose(GARDEN_WHITE_BLOCK_BACK_POSE, AutoControlMode::ROTATE_AFTER_WHITE_BLOCK, 0.0f,
+                 SEQUENCE_X_POSITION_TOLERANCE, SEQUENCE_Y_POSITION_TOLERANCE, WATERING_RELAY_MIN_SPEED);
     break;
 
   case AutoControlMode::ROTATE_AFTER_WHITE_BLOCK:
