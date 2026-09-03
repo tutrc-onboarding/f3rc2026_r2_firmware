@@ -112,7 +112,7 @@ BNO055<&hi2c3> imu;
 constexpr int BLOCK_HOLDER_OPEN_POSITION = 2414;
 constexpr int BLOCK_HOLDER_CLOSED_POSITION = 3797;
 constexpr int WATERING_CAN_PULL_POSITION = 3000;
-constexpr int WATERING_CAN_COLLECT_POSITION = 1898;
+constexpr int WATERING_CAN_COLLECT_POSITION = 2000;
 
 FeetechPositionControl block_holder_servo(uart5, 1, 3787); // 2414-3146
 FeetechPositionControl watering_can_servo(uart5, 2, 3431); // 597-3051 (get:895, pull:1532)
@@ -142,7 +142,7 @@ struct Pose {
 constexpr float SEQUENCE_X_POSITION_TOLERANCE = 0.01f;      // [m] x軸方向の許容誤差
 constexpr float SEQUENCE_Y_POSITION_TOLERANCE = 0.05f;      // [m] y軸方向の許容誤差
 constexpr float SEQUENCE_YAW_TOLERANCE = 0.025f;            // [rad] 角度の許容誤差
-constexpr float WAREHOUSE_ENTRY_POSITION_TOLERANCE = 0.01f; // [m] 倉庫進入時の座標調整を確実に反映するための許容誤差
+constexpr float WAREHOUSE_ENTRY_POSITION_TOLERANCE = 0.01f; // [m] 倉庫進入時の許容誤差
 constexpr float WAREHOUSE_ENTRY_MAX_SPEED = 0.15f;          // [m/s] 待機点から回収点までの最大並進速度
 constexpr float WAREHOUSE_EXIT_MIN_SPEED = 0.4f;            // [m/s] 倉庫退出時の最低並進速度
 constexpr float WATERING_RELAY_MIN_SPEED = 0.4f;            // [m/s] 中継点を通過する際の最低並進速度
@@ -184,9 +184,9 @@ constexpr Pose GARDEN_WHITE_BLOCK_EXIT_POSE{GARDEN_WHITE_BLOCK_BACK_POSE.x, GARD
                                             -0.5f * std::numbers::pi};
 
 // 水やり（A中継点 → A →花壇 → C中継点 → C）
-constexpr Pose WATERING_WAREHOUSE_A_RELAY{-1.0, 0.085, -0.5f * std::numbers::pi};
-constexpr Pose WATERING_WAREHOUSE_A{-1.4, 0.085f, -0.5f * std::numbers::pi};
-constexpr Pose WATERING_GARDEN{1.5f, 0.085f, -0.5f * std::numbers::pi};
+constexpr Pose WATERING_WAREHOUSE_A_RELAY{-1.0, 0.15, -0.5f * std::numbers::pi};
+constexpr Pose WATERING_WAREHOUSE_A{-1.4, 0.15f, -0.5f * std::numbers::pi};
+constexpr Pose WATERING_GARDEN{1.5f, 0.15f, -0.5f * std::numbers::pi};
 constexpr Pose WATERING_WAREHOUSE_C_RELAY{-1.0, 1.725f, -0.5f * std::numbers::pi};
 constexpr Pose WATERING_WAREHOUSE_C{-1.4, 1.725f, -0.5f * std::numbers::pi};
 
