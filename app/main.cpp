@@ -165,10 +165,9 @@ constexpr Pose WAREHOUSE_C_WAIT_POSE{WAREHOUSE_C_POSE.x + WAREHOUSE_WAIT_OFFSET_
                                      WAREHOUSE_C_POSE.yaw};
 constexpr Pose WAREHOUSE_C_EXIT_POSE{0.0f, 0.25f, WAREHOUSE_C_POSE.yaw};
 constexpr Pose WAREHOUSE_C_EXIT_ROTATED_POSE{WAREHOUSE_C_EXIT_POSE.x, WAREHOUSE_C_EXIT_POSE.y, WAREHOUSE_C_POSE.yaw};
-constexpr Pose GARDEN_BLACK_BLOCK_POSE{1.65f, 1.725f, 0.5f * std::numbers::pi};
+constexpr Pose GARDEN_BLACK_BLOCK_POSE{1.8f, 1.74f, 0.5f * std::numbers::pi};
 constexpr Pose GARDEN_BLACK_BLOCK_BACK_POSE{GARDEN_BLACK_BLOCK_POSE.x - BLOCK_BACK_DISTANCE,
                                             GARDEN_BLACK_BLOCK_POSE.y - 0.5f, GARDEN_BLACK_BLOCK_POSE.yaw};
-
 // 白ブロック回収・設置
 constexpr Pose WAREHOUSE_B_POSE{-1.10f, 0.95, -0.5f * std::numbers::pi};
 constexpr Pose WAREHOUSE_B_WAIT_POSE{WAREHOUSE_B_POSE.x + WAREHOUSE_WAIT_OFFSET_X, WAREHOUSE_B_POSE.y,
